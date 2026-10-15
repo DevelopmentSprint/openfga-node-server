@@ -11,7 +11,7 @@ NodeFGA is a Node 22 application managed with pnpm.
 ## Install
 
 ```sh
-git clone https://github.com/ribrewguy/openfga-node-server.git
+git clone https://github.com/DevelopmentSprint/openfga-node-server.git
 cd openfga-node-server
 pnpm install
 ```

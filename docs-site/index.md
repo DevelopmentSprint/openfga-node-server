@@ -13,8 +13,11 @@ hero:
       text: Get Started
       link: /guide/getting-started
     - theme: alt
+      text: v0.1.0 release
+      link: https://github.com/DevelopmentSprint/openfga-node-server/releases/tag/v0.1.0
+    - theme: alt
       text: View on GitHub
-      link: https://github.com/ribrewguy/openfga-node-server
+      link: https://github.com/DevelopmentSprint/openfga-node-server
 
 features:
   - icon: 🌐
@@ -37,7 +40,7 @@ features:
     details: Spans at every internal and external API boundary — HTTP, evaluator, storage. Per-boundary gating. Off by default; zero runtime cost when disabled.
   - icon: 🧩
     title: OpenFGA modeling language
-    details: Author authorization models in the `.fga` DSL with the upstream tooling. `@openfga/sdk` clients work directly against NodeFGA.
+    details: Author authorization models in the `.fga` DSL with the upstream tooling. Project-owned integration tests exercise supported endpoints through the official `@openfga/sdk` client.
   - icon: 🪜
     title: Migration path
     details: If you outgrow NodeFGA, the [migration runbook](/runbooks/migrate-to-upstream-openfga) covers moving stores, models, and tuples to the upstream Go reference implementation.
@@ -47,7 +50,9 @@ features:
 
 A relationship-based authorization service that lives inside your Node stack. No Go sidecar to operate, no managed-service onboarding, no separate runtime to monitor. Deploy it like any other Node service — Vercel, Fly, Cloud Run, a Kubernetes pod, a bare-metal VM — and check permissions against your authorization model from your application code over plain HTTP.
 
-NodeFGA implements the OpenFGA authorization-model semantics, so the modeling language (`.fga`), the tuple shape, and the evaluator algebra are familiar if you've worked with the OpenFGA ecosystem. The `@openfga/sdk` client works directly against it.
+NodeFGA implements the OpenFGA model for supported authorization features, using the `.fga` modeling language and relationship tuples. Project-owned integration tests exercise implemented endpoints through the official `@openfga/sdk` client. Upstream OpenFGA conformance has not been verified, and conditional tuples / ABAC are not supported. See [compatibility evidence](/guide/getting-started#compatibility-evidence).
+
+**Status:** early-stage, pre-1.0. [v0.1.0](https://github.com/DevelopmentSprint/openfga-node-server/releases/tag/v0.1.0) was released May 5, 2026. NodeFGA is a [DevelopmentSprint](https://github.com/DevelopmentSprint) project. This documentation follows `develop` and may describe changes newer than the latest release.
 
 ## What you get
 

@@ -38,7 +38,7 @@ export default defineConfig({
       { text: 'Guide', link: '/guide/getting-started' },
       { text: 'Runbooks', link: '/runbooks/deployment' },
       { text: 'Recipes', link: '/recipes/github-permissions' },
-      { text: 'GitHub', link: 'https://github.com/ribrewguy/openfga-node-server' },
+      { text: 'GitHub', link: 'https://github.com/DevelopmentSprint/openfga-node-server' },
     ],
 
     sidebar: {
@@ -110,7 +110,7 @@ export default defineConfig({
     },
 
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/ribrewguy/openfga-node-server' },
+      { icon: 'github', link: 'https://github.com/DevelopmentSprint/openfga-node-server' },
     ],
 
     footer: {
@@ -121,7 +121,7 @@ export default defineConfig({
     search: { provider: 'local' },
 
     editLink: {
-      pattern: 'https://github.com/ribrewguy/openfga-node-server/edit/develop/docs-site/:path',
+      pattern: 'https://github.com/DevelopmentSprint/openfga-node-server/edit/develop/docs-site/:path',
       text: 'Edit this page on GitHub',
     },
   },

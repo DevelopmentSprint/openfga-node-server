@@ -2,6 +2,51 @@
 
 `@` paths are relative to this file's directory.
 
+## Parent instructions
+
+Before starting work, check parent directories for `AGENTS.md` files and read
+any that apply, including `../AGENTS.md` when it exists. For a Git worktree,
+also check the parent directories of the original repository checkout so
+shared instructions are not missed because of the worktree's location.
+Apply parent instructions alongside this file; this repository's more specific
+instructions take precedence within its scope. Resolve paths relative to the
+instruction file that declares them.
+
+## Agent environment
+
+Workflow ceremony is published as installable plugins, so a fix reaches every
+project instead of the one repo someone remembered to edit:
+
+```
+/plugin marketplace add ribrewguy/agent-skills
+/plugin install throughline@ribrewguy-skills
+/plugin install multi-agent-git-workflow@ribrewguy-skills
+/plugin install task-handoff-summaries@ribrewguy-skills
+/plugin install structured-code-review@ribrewguy-skills
+```
+
+`throughline` is the entry point and dispatches to the rest: the Kickoff
+Declaration and the three completion phases, branches / worktrees / commits /
+merge authority, the review format and the three summary shapes.
+
+Three rules those plugins carry that get violated under pressure:
+
+- **Gates are not acceptance.** Nothing merges to the trunk without an explicit
+  yes from the user. Passing CI is not acceptance.
+- **A design doc is work.** The worktree precedes the first authored file, not
+  the first code edit.
+- **Cleanup belongs to the same close-out as the merge** — worktree removed
+  before the branch, because git refuses the other order.
+
+**Precedence: this file and this repo's own policies win over any plugin.**
+Thinning this file against them is a separate decision.
+
+`CLAUDE.md` and `AGENTS.md` are functional duplicates for different tooling and
+**must stay byte-identical** — a divergence leaves one tool's agent operating on
+rules the other does not have, with nothing to report it.
+
+---
+
 ## Hard Rules (Always Active)
 
 PRDs and architecture specs are located in the `docs` directory relative to the root of the repository.

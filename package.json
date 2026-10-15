@@ -2,7 +2,7 @@
   "name": "openfga-node-server",
   "version": "0.1.0",
   "private": true,
-  "description": "OpenFGA-wire-compatible authorization server in Node. Drop-in for the OpenFGA reference (Go) server for the surface this project implements.",
+  "description": "Fine-grained authorization server for Node implementing the OpenFGA model for supported features. Upstream conformance has not been verified.",
   "type": "module",
   "main": "dist/server.mjs",
   "scripts": {
