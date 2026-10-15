@@ -1,5 +1,7 @@
 /**
- * OpenFGA SDK conformance tests.
+ * Project-owned OpenFGA SDK integration tests.
+ * This is not the upstream OpenFGA conformance suite and does not establish
+ * complete OpenFGA feature parity.
  *
  * Spins up the Hono app on a real socket and exercises every
  * implemented endpoint via @openfga/sdk's high-level OpenFgaClient.

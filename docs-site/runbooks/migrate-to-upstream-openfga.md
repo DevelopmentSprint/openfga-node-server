@@ -1,17 +1,18 @@
 # Migrate to Upstream OpenFGA
 
-NodeFGA is wire-compatible with the upstream
-[OpenFGA](https://openfga.dev) reference server. If you outgrow the
-Node implementation (or find an upstream-only feature you need), you
-can swap the binary without rewriting clients or re-modeling stores.
+NodeFGA implements the [OpenFGA](https://openfga.dev) model for supported
+authorization features. Project-owned SDK tests exercise implemented endpoints;
+upstream OpenFGA conformance has not been verified. Validate your application's
+models and API calls against the upstream server before a cutover. See
+[compatibility evidence](/guide/getting-started#compatibility-evidence).
 
 ## What's compatible
 
 | Surface | Compatibility |
 |---|---|
-| HTTP API contract | Full. Every `@openfga/sdk` call works against either server. |
-| Authorization model DSL (`.fga`) | Full. `@openfga/syntax-transformer` produces identical JSON. |
-| Tuple shape | Full. `(user, relation, object)` with optional `condition`. |
+| HTTP API contract | Project-owned tests cover implemented endpoints through `@openfga/sdk`; complete API parity is not verified. |
+| Authorization model DSL (`.fga`) | Parsed with `@openfga/syntax-transformer`; evaluator support is limited to NodeFGA's supported features. |
+| Tuple shape | `(user, relation, object)`. Conditional tuples / ABAC are not supported. |
 | Store / model ids | ULID; same format both servers. |
 
 ## What's NOT compatible

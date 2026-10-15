@@ -1,7 +1,7 @@
 # Getting Started
 
 NodeFGA is a fine-grained authorization server for Node. It implements
-the OpenFGA authorization-model semantics — stores, authorization
+the OpenFGA model for supported features — stores, authorization
 models, tuples, and check / list / expand evaluations over a
 relationship graph.
 
@@ -9,7 +9,7 @@ The fastest path to a running server:
 
 ```sh
 # 1. Clone and install.
-git clone https://github.com/ribrewguy/openfga-node-server.git
+git clone https://github.com/DevelopmentSprint/openfga-node-server.git
 cd openfga-node-server
 pnpm install
 
@@ -83,3 +83,23 @@ The server is intentionally fail-fast at boot:
 The structured log line preceding the fatal error always carries the
 diagnostic field — `reason`, `err`, the offending env var. Tail the
 JSON log with `jq` to find the answer.
+
+## Compatibility evidence
+
+NodeFGA's [SDK integration tests](https://github.com/DevelopmentSprint/openfga-node-server/blob/develop/tests/integration/sdk-conformance.test.ts)
+exercise implemented endpoints through the official `@openfga/sdk` client over
+real HTTP. Run them from the repository root after installing dependencies:
+
+```sh
+pnpm test:integration tests/integration/sdk-conformance.test.ts
+```
+
+These tests are maintained by this project. They are not OpenFGA's upstream
+conformance suite, and upstream conformance has not been verified. Conditional
+tuples / ABAC are not supported; SDK integration coverage does not establish
+complete OpenFGA feature parity.
+
+NodeFGA is early-stage, pre-1.0 software. The latest release is
+[v0.1.0](https://github.com/DevelopmentSprint/openfga-node-server/releases/tag/v0.1.0)
+(May 5, 2026). This guide follows `develop` and may cover changes newer than
+that release.
