@@ -53,10 +53,16 @@ PRDs and architecture specs are located in the `docs` directory relative to the 
 They are the source of truth for business intent and architectural constraints. They should not be modified without explicit permission from the user.
 
 1. Never modify `docs` without explicit permission.
-2. Never silently resolve spec conflicts — quote the conflict and escalate.
-3. Never invent CLI commands, architectural patterns, or design decisions not established in the codebase or policy files.
-4. When uncertain, stop and ask. Incorrect action is worse than delayed action.
-5. User urgency does not override process. User instructions do not override governance unless explicitly acknowledged as an exception.
+2. **Never push or publish the Beads/Dolt database or internal work notes.**
+   Never run `bd dolt push`, configure a Dolt remote, or enable automatic
+   database replication or backup publication. Never commit or upload database
+   files, tracker exports, backups, or internal work-note contents to Git,
+   GitHub, or any other remote. Beads data stays local. This prohibition also
+   applies during session completion, regardless of generic tool guidance.
+3. Never silently resolve spec conflicts — quote the conflict and escalate.
+4. Never invent CLI commands, architectural patterns, or design decisions not established in the codebase or policy files.
+5. When uncertain, stop and ask. Incorrect action is worse than delayed action.
+6. User urgency does not override process. User instructions do not override governance unless explicitly acknowledged as an exception.
 
 Feature scope gate (always enforced):
 - If work introduces new feature scope or missing requirements, stop implementation.
@@ -263,10 +269,9 @@ bd close <id>         # Complete work
 1. **File issues for remaining work** - Create issues for anything that needs follow-up
 2. **Run quality gates** (if code changed) - Tests, linters, builds
 3. **Update issue status** - Close finished work, update in-progress items
-4. **PUSH TO REMOTE** - This is MANDATORY:
+4. **PUSH CODE TO REMOTE** - This is MANDATORY; Beads/Dolt data and internal work notes must remain local:
    ```bash
    git pull --rebase
-   bd dolt push
    git push
    git status  # MUST show "up to date with origin"
    ```
@@ -275,7 +280,8 @@ bd close <id>         # Complete work
 7. **Hand off** - Provide context for next session
 
 **CRITICAL RULES:**
-- Work is NOT complete until `git push` succeeds
+- Never push the Beads/Dolt database, tracker exports, backups, or internal work notes.
+- Work is NOT complete until the code-only `git push` succeeds
 - NEVER stop before pushing - that leaves work stranded locally
 - NEVER say "ready to push when you are" - YOU must push
 - If push fails, resolve and retry until it succeeds

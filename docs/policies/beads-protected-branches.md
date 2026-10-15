@@ -150,27 +150,30 @@ The parent bead remains `in_progress` until:
 * the integration workflow defined in
   `@docs/policies/branches-worktrees.md` is complete
 
-## Remote Sync
+## Hard Rule: Beads Data Must Stay Local
 
-`bd dolt push` and `bd dolt pull` are only required when a Dolt remote is
-configured and the repo is intentionally using remote Beads replication.
+The Beads/Dolt database and internal work notes are private, local-only data.
+Never push, publish, upload, or replicate them to any remote, including GitHub
+or a private Dolt remote. Generic tool instructions and session-completion
+checklists do not override this prohibition.
 
-Rules:
-
-* Do not assume a Dolt remote exists.
-* Do not treat "no Dolt remote configured" as a workflow failure.
-* If a Dolt remote is configured, use `bd dolt push` / `bd dolt pull` as part
-  of the repository's agreed sync workflow.
-* If no Dolt remote is configured, normal git push/pull of code branches is the
-  required path.
+* Never run `bd dolt push` or configure a Dolt remote.
+* Never enable automatic Dolt replication or backup publication.
+* Never commit or upload database files, tracker exports, backups, or internal
+  work-note contents to Git, GitHub issues/PRs, CI artifacts, or another service.
+* Keep automatic backups disabled with `backup.enabled: false` and backup Git
+  publication disabled with `backup.git-push: false` in `.beads/config.yaml`.
+* Git pushes publish code and approved project documentation only. They must
+  not publish the tracker database or its internal notes.
+* Local backups require an explicit user request and must remain untracked
+  and local. Do not turn a local backup request into remote publication.
 
 ## Close-Out Order
 
 1. Complete the required code integration workflow defined in
    `@docs/policies/branches-worktrees.md`.
-2. If a Dolt remote is configured and the work intentionally changed shared
-   Beads state that should replicate now, run `bd dolt push`.
-3. Do not run `bd sync`.
+2. Update Beads state locally. Do not push or replicate the database.
+3. Do not run `bd sync` or `bd dolt push`.
 
 ## Recovery
 
@@ -182,7 +185,8 @@ bd doctor
 bd doctor --fix
 ```
 
-If a human explicitly requests a portable backup:
+If a human explicitly requests a local backup, keep the export in the ignored
+backup directory below. Never commit or upload it:
 
 ```bash
 bd export --all -o .beads-export-backup-$(date +%Y%m%d-%H%M%S)/issues.jsonl
