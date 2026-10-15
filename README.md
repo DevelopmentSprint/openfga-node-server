@@ -1,12 +1,13 @@
-# openfga-node-server
+# NodeFGA
 
-[![codecov](https://codecov.io/gh/ribrewguy/openfga-node-server/graph/badge.svg)](https://codecov.io/gh/ribrewguy/openfga-node-server)
+[![Release](https://img.shields.io/github/v/release/DevelopmentSprint/openfga-node-server)](https://github.com/DevelopmentSprint/openfga-node-server/releases/latest)
+[![codecov](https://codecov.io/gh/DevelopmentSprint/openfga-node-server/graph/badge.svg)](https://codecov.io/gh/DevelopmentSprint/openfga-node-server)
 
 **NodeFGA** — fine-grained, relationship-based authorization for Node.
-Built on the OpenFGA authorization-model semantics; runs anywhere Node
-runs.
+Implements the OpenFGA model for the supported authorization features;
+runs anywhere Node runs. A [DevelopmentSprint](https://github.com/DevelopmentSprint) project.
 
-📖 **Full documentation:** [ribrewguy.github.io/openfga-node-server](https://ribrewguy.github.io/openfga-node-server/)
+📖 **Full documentation:** [developmentsprint.github.io/openfga-node-server](https://developmentsprint.github.io/openfga-node-server/)
 
 The published docs cover configuration, authentication modes, observability,
 deployment runbooks, recipes, and the migration path to upstream OpenFGA.
@@ -15,10 +16,29 @@ duplicate of the docs site.
 
 ## Status
 
-Prototype. The OpenFGA REST surface this project implements is wired
-end-to-end and the SDK conformance suite passes against it. See
-[bd](https://github.com/steveasleep/beads) (`bd list`) for the live work
-queue.
+**Early-stage, pre-1.0.** The latest release is
+[v0.1.0](https://github.com/DevelopmentSprint/openfga-node-server/releases/tag/v0.1.0),
+published May 5, 2026. The documentation site follows `develop` and may
+include changes newer than that release.
+
+## OpenFGA compatibility evidence
+
+NodeFGA implements the OpenFGA model, including direct relations, usersets,
+typed wildcards, computed relations, tuple-to-userset traversal, unions,
+intersections, and differences. Conditional tuples / ABAC are not supported.
+
+The repository's [SDK integration tests](tests/integration/sdk-conformance.test.ts)
+exercise implemented endpoints through the official `@openfga/sdk` client over
+real HTTP. These are project-owned tests, not OpenFGA's upstream conformance
+suite. Upstream conformance has not been verified; NodeFGA does not claim to
+pass that suite or provide complete OpenFGA feature parity.
+
+Run the SDK checks locally (SQLite, no external database required):
+
+```sh
+pnpm install --frozen-lockfile
+pnpm test:integration tests/integration/sdk-conformance.test.ts
+```
 
 ## Quick start
 
@@ -48,12 +68,12 @@ curl http://localhost:8080/health
 
 For everything else — full configuration surface, auth setup, OpenTelemetry
 wiring, production deployment runbooks, worked-example recipes — see the
-[documentation site](https://ribrewguy.github.io/openfga-node-server/).
+[documentation site](https://developmentsprint.github.io/openfga-node-server/).
 
 ## Repository layout
 
 - `src/` — server source (routes, evaluator, storage, middleware).
-- `tests/` — unit + integration tests, SDK conformance suite.
+- `tests/` — unit + integration tests, including SDK integration checks.
 - `migrations/` — Kysely-typed schema migrations.
 - `docs/` — internal specs (PRD, architecture, feature specs, policies). Not
   shipped to the docs site.

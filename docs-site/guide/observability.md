@@ -186,6 +186,6 @@ when emission is off.
 - [Enable OpenTelemetry](/runbooks/enable-otel) — operator
   checklist for production rollout
 - The internal feature spec at
-  [`docs/features/opentelemetry.md`](https://github.com/ribrewguy/openfga-node-server/blob/develop/docs/features/opentelemetry.md)
+  [`docs/features/opentelemetry.md`](https://github.com/DevelopmentSprint/openfga-node-server/blob/develop/docs/features/opentelemetry.md)
   in the repo carries the full validation strategy, security
   model, and span-attribute contract.
