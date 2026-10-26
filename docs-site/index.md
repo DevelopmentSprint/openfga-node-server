@@ -50,7 +50,7 @@ features:
 
 A relationship-based authorization service that lives inside your Node stack. No Go sidecar to operate, no managed-service onboarding, no separate runtime to monitor. Deploy it like any other Node service — Vercel, Fly, Cloud Run, a Kubernetes pod, a bare-metal VM — and check permissions against your authorization model from your application code over plain HTTP.
 
-NodeFGA implements the OpenFGA model for supported authorization features, using the `.fga` modeling language and relationship tuples. Project-owned integration tests exercise implemented endpoints through the official `@openfga/sdk` client. Upstream OpenFGA conformance has not been verified, and conditional tuples / ABAC are not supported. See [compatibility evidence](/guide/getting-started#compatibility-evidence).
+NodeFGA implements the OpenFGA model for supported authorization features, using the `.fga` modeling language and relationship tuples. Project-owned integration tests exercise implemented endpoints through the official `@openfga/sdk` client. Upstream OpenFGA conformance has not been verified, and standard model-defined conditional tuples are supported, with documented evaluation limits. See [compatibility evidence](/guide/getting-started#compatibility-evidence).
 
 **Status:** early-stage, pre-1.0. [v0.1.0](https://github.com/DevelopmentSprint/openfga-node-server/releases/tag/v0.1.0) was released May 5, 2026. NodeFGA is a [DevelopmentSprint](https://github.com/DevelopmentSprint) project. This documentation follows `develop` and may describe changes newer than the latest release.
 

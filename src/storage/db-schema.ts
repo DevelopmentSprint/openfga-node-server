@@ -42,6 +42,8 @@ export interface AuthorizationModelTable {
 }
 
 export interface TupleTable {
+  condition_name: ColumnType<string | null, string | null | undefined, string | null>
+  condition_context: ColumnType<Record<string, unknown> | null, string | null | undefined, string | null>
   store_id: string
   object_type: string
   object_id: string
@@ -51,6 +53,8 @@ export interface TupleTable {
 }
 
 export interface TupleChangeTable {
+  condition_name: ColumnType<string | null, string | null | undefined, string | null>
+  condition_context: ColumnType<Record<string, unknown> | null, string | null | undefined, string | null>
   id: string
   // bigserial on Postgres; INTEGER PRIMARY KEY equivalent on SQLite.
   // Postgres returns int8 as string by default; we keep that contract

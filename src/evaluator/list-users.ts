@@ -28,6 +28,7 @@
 import type { Userset, User, UserTypeFilter } from '@openfga/sdk'
 import type { ModelIndex } from './model-index'
 import type { TupleStore } from './tuple-store'
+import { check } from './check'
 
 export async function listUsers(
   model: ModelIndex,
@@ -36,12 +37,16 @@ export async function listUsers(
   objectId: string,
   relation: string,
   userFilter: UserTypeFilter,
+  context: Record<string, unknown> = {},
 ): Promise<User[] | null> {
   if (!model.getRelation(objectType, relation)) return null
   const reachable = await gatherForRelation(model, store, objectType, objectId, relation, new Set())
-  return [...reachable]
-    .map(toUser)
-    .filter((u) => matchesFilter(u, userFilter))
+  const out: User[] = []
+  for (const candidate of reachable) {
+    const user = toUser(candidate)
+    if (matchesFilter(user, userFilter) && await check(model, store, candidate, relation, `${objectType}:${objectId}`, context)) out.push(user)
+  }
+  return out
 }
 
 async function gather(
@@ -134,38 +139,15 @@ async function gather(
   }
 
   if (rewrite.intersection) {
-    const children = rewrite.intersection.child ?? []
-    if (children.length === 0) return new Set()
-    let acc: Set<string> | null = null
-    for (const child of children) {
-      const childUsers = await gather(model, store, objectType, objectId, relation, child, new Set(visited))
-      if (acc === null) {
-        acc = new Set(childUsers)
-      }
-      else {
-        const next = new Set<string>()
-        for (const u of childUsers) {
-          if (acc.has(u)) next.add(u)
-        }
-        acc = next
-      }
-    }
-    return acc ?? new Set()
-  }
-
-  if (rewrite.difference) {
-    const base = rewrite.difference.base
-    const subtract = rewrite.difference.subtract
-    if (!base || !subtract) return new Set()
-    const [baseUsers, subtractUsers] = await Promise.all([
-      gather(model, store, objectType, objectId, relation, base, new Set(visited)),
-      gather(model, store, objectType, objectId, relation, subtract, new Set(visited)),
-    ])
+    // Gather a superset; Check applies intersection and conditions per candidate.
     const out = new Set<string>()
-    for (const u of baseUsers) {
-      if (!subtractUsers.has(u)) out.add(u)
+    for (const child of rewrite.intersection.child ?? []) {
+      for (const user of await gather(model, store, objectType, objectId, relation, child, new Set(visited))) out.add(user)
     }
     return out
+  }
+  if (rewrite.difference?.base) {
+    return gather(model, store, objectType, objectId, relation, rewrite.difference.base, new Set(visited))
   }
 
   return new Set()

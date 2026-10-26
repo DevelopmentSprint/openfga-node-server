@@ -21,6 +21,8 @@
 import type { Node, Userset } from '@openfga/sdk'
 import type { ModelIndex } from './model-index'
 import type { TupleStore } from './tuple-store'
+import { tupleEdges } from './tuple-store'
+import { edgeAllowed } from './check'
 
 export async function expand(
   model: ModelIndex,
@@ -31,10 +33,11 @@ export async function expand(
 ): Promise<Node | null> {
   const def = model.getRelation(objectType, relation)
   if (!def) return null
-  return expandUserset(store, objectType, objectId, relation, def.rewrite)
+  return expandUserset(model, store, objectType, objectId, relation, def.rewrite)
 }
 
 async function expandUserset(
+  model: ModelIndex,
   store: TupleStore,
   objectType: string,
   objectId: string,
@@ -44,7 +47,8 @@ async function expandUserset(
   const name = `${objectType}:${objectId}#${relation}`
 
   if (rewrite.this !== undefined) {
-    const users = await store.listUsersForRelation(objectType, objectId, relation)
+    const users = (await tupleEdges(store, objectType, objectId, relation))
+      .filter(edge => edgeAllowed(model, objectType, relation, edge)).map(edge => edge.user)
     return { name, leaf: { users: { users } } }
   }
 
@@ -62,7 +66,8 @@ async function expandUserset(
       // Malformed rewrite; emit an empty users leaf rather than throwing.
       return { name, leaf: { users: { users: [] } } }
     }
-    const relatedUsers = await store.listUsersForRelation(objectType, objectId, tuplesetRel)
+    const relatedUsers = (await tupleEdges(store, objectType, objectId, tuplesetRel))
+      .filter(edge => edgeAllowed(model, objectType, tuplesetRel, edge)).map(edge => edge.user)
     const computed: Array<{ userset: string }> = []
     for (const ref of relatedUsers) {
       // Tupleset entries should be plain `type:id` object refs; skip
@@ -85,7 +90,7 @@ async function expandUserset(
   if (rewrite.union) {
     const children = rewrite.union.child ?? []
     const nodes = await Promise.all(
-      children.map((c) => expandUserset(store, objectType, objectId, relation, c)),
+      children.map((c) => expandUserset(model, store, objectType, objectId, relation, c)),
     )
     return { name, union: { nodes } }
   }
@@ -93,7 +98,7 @@ async function expandUserset(
   if (rewrite.intersection) {
     const children = rewrite.intersection.child ?? []
     const nodes = await Promise.all(
-      children.map((c) => expandUserset(store, objectType, objectId, relation, c)),
+      children.map((c) => expandUserset(model, store, objectType, objectId, relation, c)),
     )
     return { name, intersection: { nodes } }
   }
@@ -105,8 +110,8 @@ async function expandUserset(
       return { name, leaf: { users: { users: [] } } }
     }
     const [baseNode, subtractNode] = await Promise.all([
-      expandUserset(store, objectType, objectId, relation, base),
-      expandUserset(store, objectType, objectId, relation, subtract),
+      expandUserset(model, store, objectType, objectId, relation, base),
+      expandUserset(model, store, objectType, objectId, relation, subtract),
     ])
     return { name, difference: { base: baseNode, subtract: subtractNode } }
   }

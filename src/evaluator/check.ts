@@ -1,144 +1,93 @@
-/**
- * OpenFGA `check` evaluator.
- *
- * Implements the full rewrite algebra from the OpenFGA spec:
- *   - `this`              direct relation (incl. usersets and wildcards)
- *   - `computedUserset`   alias to another relation on the same object
- *   - `tupleToUserset`    "X from Y" — for each tuple via Y, evaluate X
- *   - `union`             OR over child rewrites
- *   - `intersection`      AND over child rewrites
- *   - `difference`        base rewrite minus subtract rewrite
- *
- * The evaluator depends on the `TupleStore` interface, not on Postgres
- * directly, so unit tests can drive it with an in-memory store.
- */
 import type { Userset } from '@openfga/sdk'
 import type { ModelIndex } from './model-index'
-import type { TupleStore } from './tuple-store'
+import type { TupleStore, TupleEdge } from './tuple-store'
+import { tupleEdges } from './tuple-store'
+import { ConditionError } from './conditions'
 
-export async function check(
-  model: ModelIndex,
-  store: TupleStore,
-  user: string,
-  relation: string,
-  object: string,
-): Promise<boolean> {
-  const { type: objectType, id: objectId } = parseObject(object)
-  return evaluateRelation(model, store, user, objectType, objectId, relation)
+export type EvaluationContext = Record<string, unknown>
+
+/** CEL errors participate in the algebra: true OR error and false AND error are decisive. */
+export async function combineChecks(children: Array<() => Promise<boolean>>, intersection = false): Promise<boolean> {
+  let failure: ConditionError | undefined
+  for (const child of children) {
+    try {
+      const result = await child()
+      if (result !== intersection) return result
+    }
+    catch (err) {
+      if (!(err instanceof ConditionError)) throw err
+      failure = err
+    }
+  }
+  if (failure) throw failure
+  return intersection && children.length > 0
 }
 
-async function evaluateRelation(
-  model: ModelIndex,
-  store: TupleStore,
-  user: string,
-  objectType: string,
-  objectId: string,
-  relation: string,
-): Promise<boolean> {
-  const def = model.getRelation(objectType, relation)
-  if (!def) return false
-  return evaluateUserset(model, store, user, objectType, objectId, relation, def.rewrite)
+/** Invalid persisted edges under a selected model must never become grants. */
+export function edgeAllowed(model: ModelIndex, type: string, relation: string, edge: TupleEdge): boolean {
+  const refs = model.getRelation(type, relation)?.directlyRelatedUserTypes ?? []
+  if (!edge.condition && !refs.some(ref => ref.condition)) return true
+  const [object, userset] = edge.user.split('#')
+  const [userType, id] = object!.split(':')
+  return refs.some(ref => ref.type === userType && (ref.condition || undefined) === edge.condition?.name
+    && (userset ? ref.relation === userset : id === '*' ? ref.wildcard !== undefined : !ref.relation && !ref.wildcard))
 }
 
-async function evaluateUserset(
-  model: ModelIndex,
-  store: TupleStore,
-  user: string,
-  objectType: string,
-  objectId: string,
-  relation: string,
-  rewrite: Userset,
-): Promise<boolean> {
-  if (rewrite.this !== undefined) {
-    return evaluateDirect(model, store, user, objectType, objectId, relation)
+export async function check(model: ModelIndex, store: TupleStore, user: string, relation: string, object: string, context: EvaluationContext = {}): Promise<boolean> {
+  const userType = splitObject(user).type
+  async function relationCheck(type: string, id: string, rel: string, path: Set<string>): Promise<boolean> {
+    const key = `${type}:${id}#${rel}`
+    if (path.has(key)) return false
+    if (path.size >= 25) throw new ConditionError('authorization model resolution too complex')
+    const def = model.getRelation(type, rel)
+    if (!def) return false
+    return rewriteCheck(type, id, rel, def.rewrite, new Set([...path, key]))
   }
-  if (rewrite.computedUserset) {
-    const target = rewrite.computedUserset.relation
-    if (!target) return false
-    return evaluateRelation(model, store, user, objectType, objectId, target)
-  }
-  if (rewrite.tupleToUserset) {
-    const tuplesetRel = rewrite.tupleToUserset.tupleset?.relation
-    const computedRel = rewrite.tupleToUserset.computedUserset?.relation
-    if (!tuplesetRel || !computedRel) return false
-    // Find related objects via the tupleset relation. Each user_str on
-    // those tuples is a `<type>:<id>` reference to the related object.
-    const relatedUsers = await store.listUsersForRelation(objectType, objectId, tuplesetRel)
-    for (const relatedUser of relatedUsers) {
-      // Skip wildcards/usersets here — tupleset entries are object refs.
-      if (relatedUser.endsWith(':*') || relatedUser.includes('#')) continue
-      const { type: refType, id: refId } = parseObject(relatedUser)
-      if (await evaluateRelation(model, store, user, refType, refId, computedRel)) {
-        return true
-      }
+  async function rewriteCheck(type: string, id: string, rel: string, rewrite: Userset, path: Set<string>): Promise<boolean> {
+    if (rewrite.this !== undefined) {
+      const edges = await tupleEdges(store, type, id, rel)
+      return combineChecks(edges.filter(edge => edgeAllowed(model, type, rel, edge)).map(edge => async () => {
+        const u = edge.user
+        if (u === user || (u === `${userType}:*` && !user.includes('#'))) return model.conditions.evaluate(edge.condition, context)
+        const hash = u.indexOf('#')
+        if (hash < 0) return false
+        const target = splitObject(u.slice(0, hash))
+        return combineChecks([
+          async () => model.conditions.evaluate(edge.condition, context),
+          () => relationCheck(target.type, target.id, u.slice(hash + 1), path),
+        ], true)
+      }))
+    }
+    if (rewrite.computedUserset?.relation) return relationCheck(type, id, rewrite.computedUserset.relation, path)
+    if (rewrite.tupleToUserset) {
+      const tupleset = rewrite.tupleToUserset.tupleset?.relation
+      const computed = rewrite.tupleToUserset.computedUserset?.relation
+      if (!tupleset || !computed) return false
+      const edges = await tupleEdges(store, type, id, tupleset)
+      return combineChecks(edges.filter(edge => !edge.user.includes('#') && !edge.user.endsWith(':*') && edgeAllowed(model, type, tupleset, edge)).map(edge => async () => {
+        const target = splitObject(edge.user)
+        return combineChecks([
+          async () => model.conditions.evaluate(edge.condition, context),
+          () => relationCheck(target.type, target.id, computed, path),
+        ], true)
+      }))
+    }
+    if (rewrite.union) return combineChecks((rewrite.union.child ?? []).map(child => () => rewriteCheck(type, id, rel, child, path)))
+    if (rewrite.intersection) return combineChecks((rewrite.intersection.child ?? []).map(child => () => rewriteCheck(type, id, rel, child, path)), true)
+    if (rewrite.difference?.base && rewrite.difference.subtract) {
+      return combineChecks([
+        () => rewriteCheck(type, id, rel, rewrite.difference!.base!, path),
+        async () => !(await rewriteCheck(type, id, rel, rewrite.difference!.subtract!, path)),
+      ], true)
     }
     return false
   }
-  if (rewrite.union) {
-    for (const child of rewrite.union.child ?? []) {
-      if (await evaluateUserset(model, store, user, objectType, objectId, relation, child)) {
-        return true
-      }
-    }
-    return false
-  }
-  if (rewrite.intersection) {
-    const children = rewrite.intersection.child ?? []
-    if (children.length === 0) return false
-    for (const child of children) {
-      if (!(await evaluateUserset(model, store, user, objectType, objectId, relation, child))) {
-        return false
-      }
-    }
-    return true
-  }
-  if (rewrite.difference) {
-    const base = rewrite.difference.base
-    const subtract = rewrite.difference.subtract
-    if (!base || !subtract) return false
-    const baseMatch = await evaluateUserset(model, store, user, objectType, objectId, relation, base)
-    if (!baseMatch) return false
-    const subtractMatch = await evaluateUserset(model, store, user, objectType, objectId, relation, subtract)
-    return !subtractMatch
-  }
-  return false
+  const target = splitObject(object)
+  return relationCheck(target.type, target.id, relation, new Set())
 }
 
-async function evaluateDirect(
-  model: ModelIndex,
-  store: TupleStore,
-  user: string,
-  objectType: string,
-  objectId: string,
-  relation: string,
-): Promise<boolean> {
-  const userType = parseObject(user).type
-  const users = await store.listUsersForRelation(objectType, objectId, relation)
-  for (const u of users) {
-    // Direct user reference: exact match.
-    if (u === user) return true
-    // Typed wildcard `<type>:*` matches every member of that type.
-    if (u.endsWith(':*')) {
-      const wildcardType = u.slice(0, -2)
-      if (wildcardType === userType) return true
-      continue
-    }
-    // Userset reference `<type>:<id>#<rel>` — recurse.
-    const hashIdx = u.indexOf('#')
-    if (hashIdx >= 0) {
-      const refObject = u.slice(0, hashIdx)
-      const refRelation = u.slice(hashIdx + 1)
-      const { type: refType, id: refId } = parseObject(refObject)
-      if (await evaluateRelation(model, store, user, refType, refId, refRelation)) {
-        return true
-      }
-    }
-  }
-  return false
-}
-
-function parseObject(s: string): { type: string, id: string } {
-  const idx = s.indexOf(':')
-  if (idx < 0) throw new Error(`Invalid object reference: ${s}`)
-  return { type: s.slice(0, idx), id: s.slice(idx + 1) }
+function splitObject(value: string): { type: string, id: string } {
+  const colon = value.indexOf(':')
+  if (colon < 0) throw new Error(`Invalid object reference: ${value}`)
+  return { type: value.slice(0, colon), id: value.slice(colon + 1) }
 }

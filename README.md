@@ -25,7 +25,8 @@ include changes newer than that release.
 
 NodeFGA implements the OpenFGA model, including direct relations, usersets,
 typed wildcards, computed relations, tuple-to-userset traversal, unions,
-intersections, and differences. Conditional tuples / ABAC are not supported.
+intersections, and differences. Standard model-defined conditional tuples are supported; experimental dynamic conditions are not.
+See the [condition contract and evaluation limits](docs/features/conditional-tuples.md).
 
 The repository's [SDK integration tests](tests/integration/sdk-conformance.test.ts)
 exercise implemented endpoints through the official `@openfga/sdk` client over

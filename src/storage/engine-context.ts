@@ -11,6 +11,7 @@ import { traced } from '../observability/otel'
 import { getAuthorizationModel, getLatestAuthorizationModel } from './authorization-models'
 import {
   listAllForRelation,
+  listTuplesForRelation,
   listObjectIdsForUser,
   listUsersForRelation,
 } from './tuples'
@@ -35,7 +36,7 @@ export async function loadModelIndex(
       const cacheKey = `${storeId}:${row.id}`
       let index = _modelCache.get(cacheKey)
       if (!index) {
-        index = new ModelIndex(row.type_definitions)
+        index = new ModelIndex(row.type_definitions, row.conditions ?? {})
         _modelCache.set(cacheKey, index)
       }
       return { modelId: row.id, index }
@@ -54,6 +55,8 @@ export function clearModelCache(): void {
  */
 export function pgTupleStore(storeId: string): TupleStore {
   return {
+    listTuplesForRelation: (objectType, objectId, relation) =>
+      listTuplesForRelation(storeId, objectType, objectId, relation),
     listUsersForRelation: (objectType, objectId, relation) =>
       listUsersForRelation(storeId, objectType, objectId, relation),
     listObjectIdsForUser: (objectType, relation, userStr) =>

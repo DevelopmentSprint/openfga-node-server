@@ -95,9 +95,13 @@ pnpm test:integration tests/integration/sdk-conformance.test.ts
 ```
 
 These tests are maintained by this project. They are not OpenFGA's upstream
-conformance suite, and upstream conformance has not been verified. Conditional
-tuples / ABAC are not supported; SDK integration coverage does not establish
-complete OpenFGA feature parity.
+conformance suite, and upstream conformance has not been verified. Standard model-defined conditional tuples are supported. Focused condition
+fixtures compare against OpenFGA v1.22.0; they do not establish complete feature
+parity. Experimental dynamic conditions are not supported. Condition evaluation
+uses a conservative work budget rather than upstream's exact cost counter, so
+some large expressions accepted by upstream may be rejected here. Missing
+declared context parameters produce errors; stored tuple context takes
+precedence over request context.
 
 NodeFGA is early-stage, pre-1.0 software. The latest release is
 [v0.1.0](https://github.com/DevelopmentSprint/openfga-node-server/releases/tag/v0.1.0)

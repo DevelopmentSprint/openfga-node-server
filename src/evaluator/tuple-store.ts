@@ -1,3 +1,7 @@
+import type { RelationshipCondition } from '@openfga/sdk'
+
+export interface TupleEdge { user: string, condition?: RelationshipCondition }
+
 /**
  * Storage interface the evaluator depends on.
  *
@@ -8,6 +12,7 @@
  */
 
 export interface TupleStore {
+  listTuplesForRelation?(objectType: string, objectId: string, relation: string): Promise<TupleEdge[]>
   /** Users (direct, userset, or wildcard refs) directly assigned to (object, relation). */
   listUsersForRelation(
     objectType: string,
@@ -41,6 +46,15 @@ export interface TupleStore {
  */
 export function unionTupleStore(base: TupleStore, overlay: TupleStore): TupleStore {
   return {
+    async listTuplesForRelation(objectType, objectId, relation) {
+      const [a, b] = await Promise.all([
+        tupleEdges(base, objectType, objectId, relation),
+        tupleEdges(overlay, objectType, objectId, relation),
+      ])
+      const edges = new Map(a.map(edge => [edge.user, edge]))
+      for (const edge of b) edges.set(edge.user, edge)
+      return [...edges.values()]
+    },
     async listUsersForRelation(objectType, objectId, relation) {
       const [a, b] = await Promise.all([
         base.listUsersForRelation(objectType, objectId, relation),
@@ -84,9 +98,10 @@ export class InMemoryTupleStore implements TupleStore {
     object_id: string
     relation: string
     user_str: string
+    condition?: RelationshipCondition
   }> = []
 
-  add(objectRef: string, relation: string, userStr: string): void {
+  add(objectRef: string, relation: string, userStr: string, condition?: RelationshipCondition): void {
     const idx = objectRef.indexOf(':')
     if (idx < 0) throw new Error(`Invalid object: ${objectRef}`)
     this.tuples.push({
@@ -94,7 +109,13 @@ export class InMemoryTupleStore implements TupleStore {
       object_id: objectRef.slice(idx + 1),
       relation,
       user_str: userStr,
+      condition,
     })
+  }
+
+  async listTuplesForRelation(objectType: string, objectId: string, relation: string): Promise<TupleEdge[]> {
+    return this.tuples.filter(t => t.object_type === objectType && t.object_id === objectId && t.relation === relation)
+      .map(t => ({ user: t.user_str, ...(t.condition ? { condition: t.condition } : {}) }))
   }
 
   async listUsersForRelation(
@@ -129,4 +150,9 @@ export class InMemoryTupleStore implements TupleStore {
       .filter(t => t.object_type === objectType && t.relation === relation)
       .map(t => ({ object_id: t.object_id, user_str: t.user_str }))
   }
+}
+
+export async function tupleEdges(store: TupleStore, type: string, id: string, relation: string): Promise<TupleEdge[]> {
+  if (store.listTuplesForRelation) return store.listTuplesForRelation(type, id, relation)
+  return (await store.listUsersForRelation(type, id, relation)).map(user => ({ user }))
 }

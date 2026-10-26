@@ -70,8 +70,10 @@ export function validateTupleKeyShape(tuple: WriteTupleKey): string | null {
 export function validateWriteTupleKey(model: ModelIndex, tuple: WriteTupleKey): string | null {
   const shapeError = validateTupleKeyShape(tuple)
   if (shapeError) return shapeError
-  if ('condition' in tuple && tuple.condition !== undefined) {
-    return 'tuple conditions are not supported'
+  const condition = (tuple as TupleKey).condition
+  if (condition) {
+    try { model.conditions.validateContext(condition) }
+    catch (error) { return error instanceof Error ? error.message : 'invalid condition' }
   }
 
   const object = parseObject(tuple.object)
@@ -84,7 +86,7 @@ export function validateWriteTupleKey(model: ModelIndex, tuple: WriteTupleKey): 
   }
 
   const allowed = relation.directlyRelatedUserTypes.some((ref) => {
-    if (ref.type !== user.type) return false
+    if (ref.type !== user.type || (ref.condition || undefined) !== condition?.name) return false
     if (user.kind === 'wildcard') return ref.wildcard !== undefined
     if (user.kind === 'userset') {
       return ref.relation === user.relation && model.getRelation(user.type, user.relation) !== null

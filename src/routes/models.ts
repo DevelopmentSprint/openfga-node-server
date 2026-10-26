@@ -6,6 +6,8 @@
  *   GET  /stores/:storeId/authorization-models       list models
  *   GET  /stores/:storeId/authorization-models/:id   read model
  */
+import { ModelIndex } from '../evaluator/model-index'
+import { ConditionError } from '../evaluator/conditions'
 import { Hono } from 'hono'
 import type { AuthorizationModel } from '@openfga/sdk'
 import { transformer } from '@openfga/syntax-transformer'
@@ -55,6 +57,19 @@ modelsRoutes.post('/stores/:storeId/authorization-models', async (c) => {
 
   if (!Array.isArray(model.type_definitions)) {
     return c.json({ code: 'invalid_argument', message: 'type_definitions required' }, 400)
+  }
+  try {
+    const index = new ModelIndex(model.type_definitions, model.conditions)
+    for (const td of model.type_definitions) {
+      for (const metadata of Object.values(td.metadata?.relations ?? {})) {
+        for (const ref of metadata.directly_related_user_types ?? []) {
+          if (ref.condition && !index.conditions.has(ref.condition)) throw new ConditionError(`condition '${ref.condition}' is not defined`)
+        }
+      }
+    }
+  }
+  catch (err) {
+    return c.json({ code: 'invalid_authorization_model', message: err instanceof Error ? err.message : 'invalid model' }, 400)
   }
   const row = await writeAuthorizationModel(storeId, {
     schema_version: model.schema_version ?? '1.1',

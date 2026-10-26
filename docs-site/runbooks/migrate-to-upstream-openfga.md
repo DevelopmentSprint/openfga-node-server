@@ -12,7 +12,7 @@ models and API calls against the upstream server before a cutover. See
 |---|---|
 | HTTP API contract | Project-owned tests cover implemented endpoints through `@openfga/sdk`; complete API parity is not verified. |
 | Authorization model DSL (`.fga`) | Parsed with `@openfga/syntax-transformer`; evaluator support is limited to NodeFGA's supported features. |
-| Tuple shape | `(user, relation, object)`. Conditional tuples / ABAC are not supported. |
+| Tuple shape | `(user, relation, object)`. Standard model-defined conditional tuples are supported; experimental dynamic conditions are not. |
 | Store / model ids | ULID; same format both servers. |
 
 ## What's NOT compatible

@@ -23,10 +23,8 @@
  * The Postgres path uses `migrationTableSchema`. The SQLite path
  * sets `migrationTableName` directly (no schema concept).
  *
- * The pg_dump migration recipe in the README must include
- * `--exclude-table='<namespace>.kysely_migration*'` since the
- * Migrator tracking tables are not part of the OpenFGA-compatible
- * state contract.
+ * Tracking tables are NodeFGA operational state. Upstream migration
+ * requires explicit conversion; direct dump/restore is unsupported.
  */
 import { type MigrationResultSet } from 'kysely'
 // Importing `../config` triggers c12-backed .env loading via the

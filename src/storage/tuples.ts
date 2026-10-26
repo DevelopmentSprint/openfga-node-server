@@ -24,6 +24,8 @@ import { generateId } from './ids'
 import { traced } from '../observability/otel'
 
 export interface TupleRow {
+  condition_name?: string | null
+  condition_context?: Record<string, unknown> | null
   store_id: string
   object_type: string
   object_id: string
@@ -128,9 +130,15 @@ async function applyTupleMutationsImpl(
   await getDb().transaction().execute(async (trx) => {
     for (const t of mutations.writes) {
       const obj = parseObject(t.object)
+      const condition = (t as TupleKey).condition
+      const conditionColumns = {
+        condition_name: condition?.name ?? null,
+        condition_context: condition?.context ? JSON.stringify(condition.context) : null,
+      }
       const insertResult = await trx
         .insertInto('tuple')
         .values({
+          ...conditionColumns,
           store_id: storeId,
           object_type: obj.type,
           object_id: obj.id,
@@ -158,6 +166,7 @@ async function applyTupleMutationsImpl(
             relation: t.relation,
             user_str: t.user,
             operation: 'TUPLE_OPERATION_WRITE',
+            ...conditionColumns,
           })
           .execute()
       }
@@ -233,7 +242,7 @@ export async function readTuples(
   return page.rows
 }
 
-const TUPLE_COLUMNS = ['store_id', 'object_type', 'object_id', 'relation', 'user_str', 'inserted_at'] as const
+const TUPLE_COLUMNS = ['store_id', 'object_type', 'object_id', 'relation', 'user_str', 'inserted_at', 'condition_name', 'condition_context'] as const
 
 /**
  * Cursor-paginated read of tuples for a store. Same filter surface as
@@ -336,6 +345,8 @@ async function readTuplesPageImpl(
 }
 
 export interface TupleChangeRow {
+  condition_name?: string | null
+  condition_context?: Record<string, unknown> | null
   id: string
   seq: string
   object_type: string
@@ -424,6 +435,8 @@ async function listChangesPageImpl(
       'relation',
       'user_str',
       'operation',
+      'condition_name',
+      'condition_context',
       'inserted_at',
     ])
     .where('store_id', '=', storeId)
@@ -528,4 +541,23 @@ export async function listAllForRelation(
     .where('object_type', '=', objectType)
     .where('relation', '=', relation)
     .execute()
+}
+
+/** Full edge data for condition-aware evaluation; legacy lookup helpers remain unchanged. */
+export async function listTuplesForRelation(
+  storeId: string, objectType: string, objectId: string, relation: string,
+): Promise<Array<{ user: string, condition?: TupleKey['condition'] }>> {
+  const rows = await getDb().selectFrom('tuple')
+    .select(['user_str', 'condition_name', 'condition_context'])
+    .where('store_id', '=', storeId).where('object_type', '=', objectType)
+    .where('object_id', '=', objectId).where('relation', '=', relation).execute()
+  return rows.map(row => ({ user: row.user_str, ...conditionOnWire(row) }))
+}
+
+export function conditionOnWire(row: {
+  condition_name?: string | null, condition_context?: Record<string, unknown> | null,
+}): { condition?: TupleKey['condition'] } {
+  return row.condition_name
+    ? { condition: { name: row.condition_name, context: row.condition_context ?? {} } }
+    : {}
 }

@@ -27,9 +27,12 @@
     "docs:preview": "vitepress preview docs-site"
   },
   "dependencies": {
+    "@bufbuild/cel": "0.6.1",
+    "@bufbuild/protobuf": "^2.16.0",
     "@hono/node-server": "^2.0.0",
     "@hono/otel": "^1.1.2",
     "@hono/zod-validator": "^0.7.6",
+    "@marcbachmann/cel-js": "8.0.0",
     "@openfga/syntax-transformer": "^0.2.1",
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/core": "^2.7.1",
@@ -42,10 +45,12 @@
     "better-sqlite3": "^12.10.0",
     "c12": "^3.3.4",
     "hono": "^4.6.14",
+    "ipaddr.js": "^2.5.0",
     "jose": "^6.2.3",
     "kysely": "^0.28.17",
     "pg": "^8.20.0",
     "pino": "^10.3.1",
+    "re2js": "^2.9.0",
     "zod": "^4.4.2"
   },
   "devDependencies": {

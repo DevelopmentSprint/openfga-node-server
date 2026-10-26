@@ -58,7 +58,10 @@ const OBJECT_REF = z.string().regex(/^[A-Za-z0-9_]+:([^:#\s]+(#[A-Za-z0-9_]+)?|\
  */
 const USER_REF = z.string().regex(/^[A-Za-z0-9_]+:([^:#\s]+(#[A-Za-z0-9_]+)?|\*)$/)
 
+const CONTEXT = z.record(z.string(), z.unknown())
+const CONDITION = z.object({ name: z.string().min(1), context: CONTEXT.optional() })
 const TUPLE_KEY = z.object({
+  condition: CONDITION.optional(),
   user: USER_REF,
   relation: z.string().min(1),
   object: OBJECT_REF,
@@ -134,6 +137,7 @@ export const WriteAuthorizationModelBody = z.object({
 // ─── POST /stores/:storeId/check ──────────────────────────────────
 
 export const CheckBody = z.object({
+  context: CONTEXT.optional(),
   tuple_key: TUPLE_KEY,
   authorization_model_id: z.string().optional(),
   contextual_tuples: z
@@ -211,6 +215,7 @@ const USER_TYPE_FILTER = z.object({
 }).passthrough()
 
 export const ListUsersBody = z.object({
+  context: CONTEXT.optional(),
   authorization_model_id: z.string().optional(),
   object: z.object({
     type: z.string().min(1),
@@ -256,7 +261,7 @@ const BatchCheckItem = z.object({
     })
     .passthrough()
     .optional(),
-  context: z.unknown().optional(),
+  context: CONTEXT.optional(),
   correlation_id: CORRELATION_ID,
 }).passthrough()
 
@@ -283,6 +288,7 @@ export const BatchCheckBody = z
 // ─── POST /stores/:storeId/list-objects ───────────────────────────
 
 export const ListObjectsBody = z.object({
+  context: CONTEXT.optional(),
   type: z.string().min(1),
   relation: z.string().min(1),
   user: USER_REF,

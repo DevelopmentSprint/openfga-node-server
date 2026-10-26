@@ -18,18 +18,18 @@ server in Node, runnable anywhere Node runs.
   deployments. The reference Go server has years of optimization on
   the rewrite-algebra hot path; we have straight DFS. If your check
   QPS or model depth pushes those limits, run the Go binary.
-- ABAC / conditional tuples. The Postgres schema reserves space for
-  conditions but the evaluator ignores them. Add when needed.
+- Experimental dynamic conditions (request-supplied CEL expressions).
+  Standard model-defined conditional tuples are approved scope below.
 
 ## Design principles
 
 1. **Wire-compatible byte-for-byte.** The HTTP request and response
    shapes match the OpenFGA REST API. `@openfga/sdk` clients work
    unchanged.
-2. **Schema-compatible byte-for-byte.** The Postgres schema mirrors
-   the OpenFGA reference server's reference schema. A future
-   migration is `pg_dump --schema=openfga` and a single env-var flip
-   on the consuming application.
+2. **Portable storage with explicit upstream conversion.** NodeFGA uses
+   its own Postgres/SQLite schema. Migration to OpenFGA requires a tested
+   conversion or API export/import process; direct dump/restore is not
+   supported. Wire compatibility does not imply physical schema parity.
 3. **Boundary-thin core.** The evaluator depends on a `TupleStore`
    interface, not on Postgres directly. Unit tests drive the
    evaluator with an in-memory store; the production wiring uses pg.
@@ -86,6 +86,19 @@ Cross-cutting OpenFGA-aligned features tracked separately:
 - `openfga-711` — OIDC authentication mode (`none` and `preshared`
   modes shipped under `openfga-ywi`; OIDC layers onto the same
   middleware dispatch — see §API caller authentication)
+
+### Conditional tuples
+
+Support standard OpenFGA model-defined CEL conditions on stored and
+contextual relationship tuples, including typed parameters, stored tuple
+context, and request context. Evaluate them consistently in Check,
+BatchCheck, ListObjects, and ListUsers. Preserve condition metadata through
+Write, Read, and ReadChanges. Missing or invalid evaluation inputs must
+follow upstream error semantics rather than silently grant access.
+
+The requirements, runtime design, and compatibility limits are in
+[`docs/features/conditional-tuples.md`](features/conditional-tuples.md).
+The focused reference tests do not establish complete upstream conformance.
 
 ### Evaluation algebra
 
@@ -163,13 +176,8 @@ Idempotency is enforced at the HTTP middleware boundary for configured
 mutating endpoints. It must not change successful OpenFGA response
 shapes. Idempotency persistence lives alongside the OpenFGA tables in
 the configured namespace (`OPENFGA_DB_NAMESPACE`, default `openfga`)
-for operational simplicity. None of the operational tables —
-`idempotency_keys`, `tuple_change`, `assertions` — nor the Kysely
-Migrator's tracking tables (`kysely_migration`,
-`kysely_migration_lock`) are part of the OpenFGA-compatible state
-contract; the schema-compatible migration path to upstream OpenFGA is
-preserved by excluding all five at dump time. See §Migration path
-FROM this server TO upstream OpenFGA for the full recipe.
+for operational simplicity. Operational data is not part of the upstream
+migration contract; see §Migration path FROM this server TO upstream OpenFGA.
 
 ### OpenTelemetry observability
 
@@ -200,38 +208,24 @@ OpenTelemetry settings through environment variables.
 
 ## Migration path FROM this server TO upstream OpenFGA
 
-Built into the design. When you outgrow this server (performance,
-operational maturity, or a need for the not-yet-implemented
-endpoints):
+NodeFGA's physical schema and serialization differ from upstream OpenFGA.
+A direct Postgres dump/restore is unsupported on either backend.
 
-1. Provision an upstream OpenFGA Go server with a Postgres datastore.
-2. `pg_dump` from this server's database, excluding the operational
-   and Migrator-tracking tables that aren't part of the OpenFGA
-   reference contract (substitute the configured namespace; default
-   is `openfga`):
+Migration must use an explicit converter or API export/import workflow,
+verified against a pinned upstream release before it is advertised as supported.
+It must preserve model definitions, tuple conditions and context, assertions,
+and authorization outcomes, and produce mappings for changed store/model IDs.
+Operational data and historical changelog/idempotency records are not imported
+as live authorization state. Consumers must use the resulting IDs and endpoint.
 
-   ```sh
-   pg_dump --schema=<namespace> \
-           --exclude-table='<namespace>.idempotency_keys' \
-           --exclude-table='<namespace>.tuple_change' \
-           --exclude-table='<namespace>.assertions' \
-           --exclude-table='<namespace>.kysely_migration' \
-           --exclude-table='<namespace>.kysely_migration_lock'
-   ```
-
-   Restore the dump into the new datastore.
-3. Update the new OpenFGA server's `--datastore-uri`.
-4. Flip `OPENFGA_API_URL` on consuming applications.
-
-No application code changes. No SDK changes. No model changes.
-
-This path is **Postgres-only** — operators running the SQLite backend
-must first migrate to Postgres (manual data export / re-import via
-the application's read/write APIs) before this recipe applies.
+Acceptance requires export/import tests from both Postgres and SQLite, counts
+and payload comparisons, and representative Check/ListObjects/ListUsers results
+on source and destination. No converter has yet been delivered or validated.
+This is a required future migration contract, not an executable migration recipe.
 
 ## Future scope (non-binding)
 
-- Authorization model conditions / ABAC.
+- Experimental dynamic conditions beyond standard model-defined conditions.
 - Caching layer in front of `check` (the upstream server has one).
 - A reverse-expansion algorithm for `list-objects` that doesn't fall
   back to per-candidate `check()`.

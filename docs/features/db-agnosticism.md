@@ -29,7 +29,7 @@ A database-agnostic storage layer delivers two compounding wins:
 - Preserve every behavior of the current Postgres path byte-for-byte, including the timestamp-microsecond-precision fix from `openfga-5uv` and the clock-skew-safe idempotency claim from `openfga-how`.
 - Replace `node-pg-migrate` with a multi-dialect migration runner that ships migrations as TypeScript so a single source generates the correct SQL per engine.
 - Add a fast unit-only test path that exercises the storage layer against in-memory SQLite.
-- Document the supported engines, the configuration surface, the operational tradeoffs, and the migration-path-to-upstream-OpenFGA constraint (which only applies to the Postgres backend).
+- Document the supported engines, the configuration surface, the operational tradeoffs, and the explicit upstream-conversion contract for both backends.
 
 ## Non-Goals
 
@@ -80,7 +80,7 @@ Operators control the namespace under which every table this server owns lives, 
 
 The same value is interpreted per-engine:
 
-- **Postgres** — used as a schema name. The migration runs `CREATE SCHEMA IF NOT EXISTS <namespace>`; every query references `<namespace>.<table>`. Default `openfga` preserves the current `openfga.*` layout and the existing `pg_dump --schema=openfga` migration-to-upstream recipe.
+- **Postgres** — used as a schema name. The migration runs `CREATE SCHEMA IF NOT EXISTS <namespace>`; every query references `<namespace>.<table>`. Default `openfga` preserves the current NodeFGA layout. Upstream migration requires explicit conversion, as specified in the PRD.
 - **SQLite** — used as a table-name prefix joined by underscore. Every query references `<namespace>_<table>`. Default `openfga` produces `openfga_store`, `openfga_tuple`, etc.
 
 The namespace covers **every table this server owns**, with no exceptions:
@@ -89,7 +89,7 @@ The namespace covers **every table this server owns**, with no exceptions:
 - The three operational tables: `idempotency_keys`, `tuple_change`, `assertions`.
 - The Kysely `Migrator` tracking tables: `kysely_migration` and `kysely_migration_lock` (the Migrator is configured with the namespace at construction time so the tables it creates respect the operator's setting).
 
-Rationale: operators dropping this server into an existing Postgres instance need the freedom to pick a non-default schema (`openfga` may collide with an existing schema, or they may want everything under `app_authz`); SQLite operators sharing a database file need the same freedom for the prefix. The `pg_dump --schema=<namespace>` migration recipe in the PRD and README must be re-stated against the configured value, not hard-coded as `openfga`.
+Rationale: operators dropping this server into an existing Postgres instance need the freedom to pick a non-default schema (`openfga` may collide with an existing schema, or they may want everything under `app_authz`); SQLite operators sharing a database file need the same freedom for the prefix. Backup and conversion tools must honor the configured namespace.
 
 ## Storage Abstraction Boundaries
 
@@ -166,7 +166,7 @@ The `pnpm migrate up` and `pnpm migrate down` scripts call into the new runner. 
 
 The Migrator is constructed with the `OPENFGA_DB_NAMESPACE` value (default `openfga`) so its tracking tables (`kysely_migration` and `kysely_migration_lock`) live under the same namespace as the OpenFGA tables — `<namespace>.kysely_migration` on Postgres, `<namespace>_kysely_migration` on SQLite. This keeps `pg_dump --schema=<namespace> --exclude-table=...` recipes self-contained and prevents the Migrator from polluting the operator's `public` schema (or the SQLite database's top-level table namespace).
 
-The schema-mirroring constraint to upstream OpenFGA is preserved when operators leave the namespace at its `openfga` default: the Postgres path produces the canonical `openfga.<table>` layout that `pg_dump --schema=openfga` exports cleanly. Operators who choose a non-default namespace must substitute it into the dump recipe accordingly; the README documents this substitution.
+NodeFGA does not mirror upstream physical schemas. The PRD now requires a tested conversion or API export/import workflow; a direct dump/restore is unsupported.
 
 ## CI / Test Strategy
 
@@ -184,11 +184,11 @@ The schema-mirroring constraint to upstream OpenFGA is preserved when operators 
 | Concurrent writers across instances | Yes | No (single process owns the DB file) |
 | Durability | fsync via WAL | WAL mode supported; fsync semantics are filesystem-dependent |
 | Row-Level Security | Enabled | Not available |
-| `pg_dump --schema=openfga` migration to upstream OpenFGA | Supported | Not supported (no equivalent dump) |
+| Direct dump/restore to upstream OpenFGA | Unsupported; conversion required | Unsupported; conversion required |
 | Hot backups | Standard pg tooling | File copy (with WAL checkpoint) |
 | Pool tuning env vars | Honored | Ignored |
 
-The README's "Migrating to upstream OpenFGA" section calls this out: the upstream-migration path requires the Postgres backend.
+Upstream conversion must be tested for both backends before being advertised as supported.
 
 ## Phasing
 
@@ -215,7 +215,7 @@ Each step ships on its own bead off `feature/openfga-8ri_db-agnosticism` (or a c
 - The vitest `unit` project exercises storage against in-memory SQLite without requiring `OPENFGA_DB_URL` to point at a service.
 - The vitest `integration` project continues to exercise Postgres against a real container.
 - The Postgres path preserves byte-for-byte the behaviors fixed under `openfga-5uv` (timestamp microsecond precision) and `openfga-how` (SQL-side TTL cutoff for idempotency claim).
-- The README documents the supported engines, the connection-string-based engine selection, and the operational tradeoffs (concurrency, durability, RLS, `pg_dump` migration availability).
+- The README documents the supported engines, the connection-string-based engine selection, and the operational tradeoffs (concurrency, durability, RLS, explicit upstream conversion requirements).
 - The PRD's §Storage and §Operational shape sections are updated to reflect the dual-backend reality.
 - Coverage thresholds in `vitest.config.ts` reflect the post-port baseline (target: 85/78/82/85, revise after measurement).
 

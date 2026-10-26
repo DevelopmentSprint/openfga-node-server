@@ -11,6 +11,7 @@
  */
 import type { Userset } from '@openfga/sdk'
 import { check } from './check'
+import { ConditionError } from './conditions'
 import type { ModelIndex } from './model-index'
 import type { TupleStore } from './tuple-store'
 
@@ -20,12 +21,13 @@ export async function listObjects(
   user: string,
   relation: string,
   objectType: string,
+  context: Record<string, unknown> = {},
 ): Promise<string[]> {
   if (!model.hasType(objectType)) return []
   const candidates = await gather(model, store, user, objectType, relation, new Set())
   const out: string[] = []
   for (const oid of candidates) {
-    if (await check(model, store, user, relation, `${objectType}:${oid}`)) {
+    if (await check(model, store, user, relation, `${objectType}:${oid}`, context)) {
       out.push(oid)
     }
   }
@@ -123,7 +125,13 @@ async function gatherDirect(
     const refObject = user_str.slice(0, hashIdx)
     const refRelation = user_str.slice(hashIdx + 1)
     const { type: refType, id: refId } = parseObject(refObject)
-    if (await check(model, store, user, refRelation, `${refType}:${refId}`)) {
+    try {
+      if (await check(model, store, user, refRelation, `${refType}:${refId}`)) out.add(object_id)
+    }
+    catch (error) {
+      if (!(error instanceof ConditionError)) throw error
+      // Candidate discovery cannot decide an edge without request context.
+      // The final Check uses the complete context and error algebra.
       out.add(object_id)
     }
   }

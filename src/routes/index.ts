@@ -33,6 +33,8 @@
  *   3. requireStore /stores/:storeId/* — 404 on unknown store
  *   4. idempotency  Idempotency-Key for configured mutating endpoints
  */
+import { logger } from '../logger'
+import { ConditionError } from '../evaluator/conditions'
 import { Hono } from 'hono'
 import { httpInstrumentationMiddleware as honoOtel } from '@hono/otel'
 import { config } from '../config'
@@ -49,6 +51,11 @@ import { tuplesRoutes } from './tuples'
 
 export function buildApp(): Hono {
   const app = new Hono()
+  app.onError((error, c) => {
+    if (error instanceof ConditionError) return c.json({ code: error.code, message: error.message }, 400)
+    logger.error({ err: error }, 'request_failed')
+    return c.json({ code: 'internal_error', message: 'Internal Server Error' }, 500)
+  })
 
   // OpenTelemetry HTTP instrumentation — must wrap every later
   // middleware so the request span is the parent of auth /

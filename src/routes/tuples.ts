@@ -9,6 +9,7 @@
 import { Hono } from 'hono'
 import {
   DuplicateTupleError,
+  conditionOnWire,
   InvalidObjectReferenceError,
   MissingTupleError,
   applyTupleMutations,
@@ -104,6 +105,7 @@ tuplesRoutes.post('/stores/:storeId/read', validate('json', ReadBody), async (c)
   return c.json({
     tuples: page.rows.map(r => ({
       key: {
+        ...conditionOnWire(r),
         user: r.user_str,
         relation: r.relation,
         object: `${r.object_type}:${r.object_id}`,
@@ -181,6 +183,7 @@ tuplesRoutes.get('/stores/:storeId/changes', validate('query', ChangesQuery), as
   return c.json({
     changes: page.rows.map((r) => ({
       tuple_key: {
+        ...conditionOnWire(r),
         user: r.user_str,
         relation: r.relation,
         object: `${r.object_type}:${r.object_id}`,

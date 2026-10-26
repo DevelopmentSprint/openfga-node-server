@@ -9,6 +9,8 @@
  * relation metadata) so the evaluator can answer wildcard checks like
  * "is `user:*` valid for this relation?" without re-walking the model.
  */
+import { Conditions } from './conditions'
+import type { Condition } from '@openfga/sdk'
 import type { TypeDefinition, Userset, RelationReference } from '@openfga/sdk'
 
 export interface RelationDef {
@@ -22,7 +24,10 @@ export class ModelIndex {
   /** Map<objectType, Map<relation, RelationDef>>. */
   private byType: Map<string, Map<string, RelationDef>>
 
-  constructor(typeDefinitions: TypeDefinition[]) {
+  readonly conditions: Conditions
+
+  constructor(typeDefinitions: TypeDefinition[], conditions: Record<string, Condition> = {}) {
+    this.conditions = new Conditions(conditions)
     this.byType = new Map()
     for (const td of typeDefinitions) {
       const relations = td.relations ?? {}
