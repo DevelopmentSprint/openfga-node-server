@@ -47,7 +47,7 @@ The default when no `Content-Type` is provided remains JSON, matching today's be
 
 ### Response shape
 
-Unchanged. Successful writes return:
+Successful writes return HTTP `201` with:
 
 ```json
 { "authorization_model_id": "<id>" }
@@ -61,20 +61,20 @@ Unchanged. Successful writes return:
 |---|---|---|
 | DSL body cannot be read as text | `400` | `{ "code": "invalid_argument", "message": "..." }` |
 | DSL parse failure (transformer throws) | `400` | `{ "code": "invalid_argument", "message": "<line/column included when available>" }` |
-| JSON path validation failures | unchanged | unchanged |
-| Store not found | `404` (unchanged) | `{ "code": "not_found", ... }` (unchanged) |
+| Model-semantic validation failure (JSON or transformed DSL) | `400` | `{ "code": "invalid_authorization_model", "message": "..." }` |
+| Store not found | `404` (unchanged) | `{ "code": "store_id_not_found", ... }` |
 
 DSL parse failures are client errors, not server errors. They must surface as `400`, never `5xx`.
 
 ## Acceptance Criteria
 
-- POSTing a valid `.fga` body with `Content-Type: application/x-openfga-dsl` returns `200` with `authorization_model_id` and a subsequent `GET /stores/:storeId/authorization-models/:id` returns the expected `type_definitions`.
+- POSTing a valid `.fga` body with `Content-Type: application/x-openfga-dsl` returns `201` with `authorization_model_id` and a subsequent `GET /stores/:storeId/authorization-models/:id` returns the expected `type_definitions`.
 - POSTing a valid `.fga` body with `Content-Type: text/plain` works the same way.
 - POSTing the existing JSON shape with `Content-Type: application/json` continues to work unchanged.
 - POSTing without a `Content-Type` header continues to be treated as JSON.
 - POSTing invalid DSL returns `400` with a structured `invalid_argument` error envelope. The message includes line/column when the transformer surfaces them.
 - Content-Type parameter handling is tolerant — `application/x-openfga-dsl; charset=utf-8` matches the DSL branch.
-- The route handler is the only file changed in `src/`. Storage, evaluator, and other routes are untouched.
+- DSL transformation remains at the route boundary. Both content types share model-semantic validation before storage.
 - Tests cover all four acceptance scenarios above. The DSL fixture is `tests/fixtures/github.fga`.
 - Quality gates pass: `pnpm typecheck`, `pnpm test`, `pnpm build`.
 - README endpoint table notes the dual content-type acceptance on `POST /stores/:storeId/authorization-models`.

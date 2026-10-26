@@ -52,13 +52,15 @@ unchanged.
 Currently implemented:
 
 - `GET /stores` (cursor-paginated)
-- `POST /stores`
-- `{POST,GET} /stores/:storeId/authorization-models`
+- `POST /stores` (`201` on creation)
+- `{GET,DELETE} /stores/:storeId` (soft deletion; repeated DELETE returns `204`)
+- `{POST,GET} /stores/:storeId/authorization-models` (`201` on creation; cursor-paginated listing)
 - `GET /stores/:storeId/authorization-models/:id`
 - `POST /stores/:storeId/check` (with `contextual_tuples`)
 - `POST /stores/:storeId/write` (transactional, records changelog)
 - `POST /stores/:storeId/read` (cursor-paginated)
 - `POST /stores/:storeId/list-objects` (with `contextual_tuples`)
+- `POST /stores/:storeId/streamed-list-objects` (newline-delimited result records; evaluation currently completes before records are sent)
 - `POST /stores/:storeId/expand` (with `contextual_tuples`)
 - `POST /stores/:storeId/batch-check` (per-item `contextual_tuples`,
   results keyed by `correlation_id`)
@@ -71,6 +73,18 @@ Currently implemented:
 - `GET /ready` (auth-exempt readiness probe — `200 ok` only when the
   database is reachable and the configured namespace has the expected
   schema; `503` with a generic `reason` otherwise)
+
+Model writes validate supported schema versions, type/relation references,
+rewrite structure, type restrictions, condition declarations, computed-alias
+cycles, and grounded recursive entrypoints before persistence. Model validation
+bounds nesting and total input nodes. A stored tuple that no longer matches the
+selected model's type restrictions must not grant access. Usersets contain
+themselves even without stored membership tuples.
+
+Focused v1.22.0 comparisons cover these cases, nested wildcard exclusions,
+store read/delete, model pagination, selected request/response differences,
+and streamed result framing. They do not establish complete upstream
+conformance. UpdateStore remains unimplemented in the pinned reference server.
 
 The full OpenFGA REST wire-compliance epic (`openfga-68n`) closed
 with all seven endpoint children shipped (`openfga-7ct`,

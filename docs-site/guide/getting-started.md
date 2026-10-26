@@ -94,14 +94,43 @@ real HTTP. Run them from the repository root after installing dependencies:
 pnpm test:integration tests/integration/sdk-conformance.test.ts
 ```
 
-These tests are maintained by this project. They are not OpenFGA's upstream
-conformance suite, and upstream conformance has not been verified. Standard model-defined conditional tuples are supported. Focused condition
-fixtures compare against OpenFGA v1.22.0; they do not establish complete feature
-parity. Experimental dynamic conditions are not supported. Condition evaluation
-uses a conservative work budget rather than upstream's exact cost counter, so
-some large expressions accepted by upstream may be rejected here. Missing
-declared context parameters produce errors; stored tuple context takes
-precedence over request context.
+These tests are maintained by this project. They are not OpenFGA's complete
+upstream conformance suite.
+
+Standard **model-defined conditions** are supported: declare a CEL expression
+in the authorization model, attach its name to a tuple, and supply changing
+request data such as time or IP address when checking access. Stored tuple
+context takes precedence over request context. Missing declared parameters
+produce errors. Experimental **dynamic conditions**, which supply the CEL
+expression itself at request time, remain unsupported.
+
+The [reference comparison tests](https://github.com/DevelopmentSprint/openfga-node-server/blob/develop/tests/integration/rest-parity.test.ts)
+run against a pinned OpenFGA v1.22.0 server. They cover valid and invalid model
+semantics, wildcard intersections and nested exclusions, userset self-membership,
+store read/delete, model pagination, selected error responses, and streamed
+ListObjects framing. Separate condition fixtures cover condition evaluation.
+
+Recent compatibility changes include:
+
+- Store and model creation return `201`. Duplicate tuple writes return `400`
+  with `write_failed_due_to_invalid_input`.
+- `GET /stores/{id}` reads a store. `DELETE /stores/{id}` returns `204`, including
+  repeated deletion, and makes the store unavailable to subsequent requests.
+- Authorization-model listings return continuation tokens; pass the token back
+  with the next request to retrieve older models.
+- `/streamed-list-objects` returns newline-delimited JSON records shaped as
+  `{"result":{"object":"document:one"}}`. It currently evaluates the full result
+  before sending records; it does not provide incremental graph evaluation.
+- Invalid model references, ungrounded recursive relations, computed-alias
+  cycles, and invalid type restrictions are rejected before model persistence.
+
+These checks do not establish complete feature parity. Exact validation messages,
+all invalid-request cases, broader graph algebra, and the complete CEL language
+remain outside the verified coverage. Condition evaluation uses a conservative
+work budget, so some expressions accepted by upstream may be rejected here.
+Model validation also bounds input nesting and node count. The pinned reference
+server itself leaves `UpdateStore` unimplemented, so that operation is not
+included in the supported surface.
 
 NodeFGA is early-stage, pre-1.0 software. The latest release is
 [v0.1.0](https://github.com/DevelopmentSprint/openfga-node-server/releases/tag/v0.1.0)

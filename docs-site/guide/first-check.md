@@ -87,7 +87,7 @@ curl -sS -X POST http://localhost:8080/stores/$STORE_ID/check \
       "object": "repo:openfga/demo"
     }
   }' | jq
-# { "allowed": false }
+# { "allowed": false, "resolution": "" }
 ```
 
 ## What just happened

@@ -28,6 +28,14 @@ export function requireStore(): MiddlewareHandler {
         404,
       )
     }
+    if (c.req.path === `/stores/${storeId}` && !/^[0-9A-HJKMNP-TV-Z]{26}$/.test(storeId)) {
+      return c.json({ code: 'validation_error', message: 'invalid store id' }, 400)
+    }
+    // Upstream DELETE is idempotent even for an absent/deleted store.
+    if (c.req.method === 'DELETE' && c.req.path === `/stores/${storeId}`) {
+      await next()
+      return
+    }
     const store = await getStore(storeId)
     if (!store) {
       return c.json(

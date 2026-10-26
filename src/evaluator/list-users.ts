@@ -147,7 +147,11 @@ async function gather(
     return out
   }
   if (rewrite.difference?.base) {
-    return gather(model, store, objectType, objectId, relation, rewrite.difference.base, new Set(visited))
+    // Exclusions can become grants when nested under another difference.
+    // Keep their concrete candidates; Check decides membership at the root.
+    const base = await gather(model, store, objectType, objectId, relation, rewrite.difference.base, new Set(visited))
+    const subtract = await gather(model, store, objectType, objectId, relation, rewrite.difference.subtract!, new Set(visited))
+    return new Set([...base, ...subtract])
   }
 
   return new Set()
@@ -167,7 +171,9 @@ async function gatherForRelation(
   if (!def) return new Set()
   const next = new Set(visited)
   next.add(visitKey)
-  return gather(model, store, objectType, objectId, relation, def.rewrite, next)
+  const users = await gather(model, store, objectType, objectId, relation, def.rewrite, next)
+  users.add(visitKey)
+  return users
 }
 
 function toUser(userStr: string): User {

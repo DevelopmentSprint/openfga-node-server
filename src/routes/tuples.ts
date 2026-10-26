@@ -65,7 +65,7 @@ tuplesRoutes.post('/stores/:storeId/write', validate('json', WriteBody), async (
   }
   catch (err) {
     if (err instanceof DuplicateTupleError || err instanceof MissingTupleError) {
-      return c.json({ code: 'conflict', message: err.message }, 409)
+      return c.json({ code: 'write_failed_due_to_invalid_input', message: err.message }, 400)
     }
     throw err
   }
@@ -76,6 +76,9 @@ tuplesRoutes.post('/stores/:storeId/read', validate('json', ReadBody), async (c)
   const storeId = c.req.param('storeId')
   const body = c.req.valid('json')
   const tk = body.tuple_key
+  if (tk && (!tk.object || (!tk.object.split(':')[1] && !tk.user))) {
+    return c.json({ code: 'validation_error', message: "the 'tuple_key' field was provided but the object type field is required and both the object id and user cannot be empty" }, 400)
+  }
   let cursor: ReadTupleCursor | null = null
   if (body.continuation_token !== undefined && body.continuation_token.length > 0) {
     cursor = decodeReadCursor(body.continuation_token)

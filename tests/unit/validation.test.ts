@@ -230,7 +230,7 @@ describe('request validation — accepted object shapes pass the boundary', () =
   ]) {
     it(`accepts a well-formed object '${object}' at the validation boundary`, async () => {
       const res = await app.fetch(postJson('/stores/abc/read', {
-        tuple_key: { object },
+        tuple_key: { object, user: 'user:alice' },
       }))
       expect(res.status).not.toBe(400)
     })
@@ -250,7 +250,7 @@ describe('request validation — unknown fields are passed through', () => {
     // read. They must not be rejected by the validation boundary.
     const res = await app.fetch(postJson('/stores/abc/check', {
       tuple_key: { user: 'user:alice', relation: 'viewer', object: 'doc:1' },
-      authorization_model_id: 'fake-model-id',
+      authorization_model_id: '01M5X4VSFEV23X0B26DAJ26CW2',
       contextual_tuples: { tuple_keys: [] },
       context: { ip: '127.0.0.1' },
       trace: true,

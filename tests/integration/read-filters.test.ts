@@ -63,13 +63,11 @@ describeIfDb('/read object-filter semantics', () => {
     })
   }
 
-  it('returns every tuple of the requested type for a "type:" filter', async () => {
+  it('requires a user when an object filter omits the object id', async () => {
     const { app, storeId } = await setup()
     const res = await app.fetch(read(storeId, { tuple_key: { object: 'doc:' } }))
-    expect(res.status).toBe(200)
-    const json = await res.json() as ReadResponse
-    const objects = json.tuples.map((t) => t.key.object).sort()
-    expect(objects).toEqual(['doc:1', 'doc:2'])
+    expect(res.status).toBe(400)
+    expect(await res.json()).toMatchObject({ code: 'validation_error' })
   })
 
   it('returns the exact tuple for a full "type:id" filter (regression)', async () => {

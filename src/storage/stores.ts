@@ -113,3 +113,10 @@ export async function listStoresPage(
   const last = page[page.length - 1]!
   return { rows: page, nextCursor: { created_at: last.created_at, id: last.id } }
 }
+
+/** Soft deletion keeps authorization history while hiding all store-scoped APIs. */
+export async function deleteStore(id: string): Promise<void> {
+  await getDb().updateTable('store')
+    .set({ deleted_at: new Date().toISOString() })
+    .where('id', '=', id).where('deleted_at', 'is', null).execute()
+}

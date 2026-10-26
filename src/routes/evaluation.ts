@@ -11,6 +11,8 @@
 import { logger } from '../logger'
 import { ConditionError } from '../evaluator/conditions'
 import { Hono } from 'hono'
+import { stream } from 'hono/streaming'
+import { validateRelation, validateUser, validateObject } from './_helpers/evaluation-validation'
 import { check } from '../evaluator/check'
 import { expand } from '../evaluator/expand'
 import { listObjects } from '../evaluator/list-objects'
@@ -36,6 +38,9 @@ evaluationRoutes.post('/stores/:storeId/check', validate('json', CheckBody), asy
   const ctx = await loadModelIndex(storeId, body.authorization_model_id)
   if (!ctx) return c.json({ code: 'not_found', message: 'authorization model not found' }, 404)
   const store = withContextualTuples(pgTupleStore(storeId), body.contextual_tuples?.tuple_keys, ctx.index)
+  validateObject(tk.object)
+  validateRelation(ctx.index, tk.object.split(':')[0]!, tk.relation)
+  validateUser(ctx.index, tk.user)
   const allowed = await traced(
     'evaluator',
     'openfga.evaluator.check',
@@ -46,15 +51,18 @@ evaluationRoutes.post('/stores/:storeId/check', validate('json', CheckBody), asy
       return result
     },
   )
-  return c.json({ allowed })
+  return c.json({ allowed, resolution: '' })
 })
 
-evaluationRoutes.post('/stores/:storeId/list-objects', validate('json', ListObjectsBody), async (c) => {
+for (const path of ['/stores/:storeId/list-objects', '/stores/:storeId/streamed-list-objects'] as const) {
+evaluationRoutes.post(path, validate('json', ListObjectsBody), async (c) => {
   const storeId = c.req.param('storeId')
   const body = c.req.valid('json')
   const ctx = await loadModelIndex(storeId, body.authorization_model_id)
   if (!ctx) return c.json({ code: 'not_found', message: 'authorization model not found' }, 404)
   const store = withContextualTuples(pgTupleStore(storeId), body.contextual_tuples?.tuple_keys, ctx.index)
+  validateRelation(ctx.index, body.type, body.relation)
+  validateUser(ctx.index, body.user)
   const ids = await traced(
     'evaluator',
     'openfga.evaluator.list_objects',
@@ -70,14 +78,30 @@ evaluationRoutes.post('/stores/:storeId/list-objects', validate('json', ListObje
       return result
     },
   )
+  if (c.req.path.endsWith('/streamed-list-objects')) {
+    c.header('Content-Type', 'application/json')
+    return stream(c, async (output) => {
+      for (const id of ids) {
+        if (output.aborted) break
+        await output.write(JSON.stringify({ result: { object: `${body.type}:${id}` } }) + '\n')
+      }
+    })
+  }
   return c.json({ objects: ids.map(id => `${body.type}:${id}`) })
 })
+
+}
 
 evaluationRoutes.post('/stores/:storeId/list-users', validate('json', ListUsersBody), async (c) => {
   const storeId = c.req.param('storeId')
   const body = c.req.valid('json')
   const ctx = await loadModelIndex(storeId, body.authorization_model_id)
   if (!ctx) return c.json({ code: 'not_found', message: 'authorization model not found' }, 404)
+
+  validateRelation(ctx.index, body.object.type, body.relation)
+  const filter = body.user_filters[0]!
+  if (filter.relation) validateRelation(ctx.index, filter.type, filter.relation)
+  else validateUser(ctx.index, `${filter.type}:filter`)
 
   // ListUsersRequest's contextual_tuples is a flat array (unlike
   // check/list-objects) — adapt to the same overlay helper.
@@ -130,6 +154,7 @@ evaluationRoutes.post('/stores/:storeId/expand', validate('json', ExpandBody), a
   }
 
   const store = withContextualTuples(pgTupleStore(storeId), body.contextual_tuples?.tuple_keys, ctx.index)
+  validateRelation(ctx.index, objectType, body.tuple_key.relation)
   const root = await traced(
     'evaluator',
     'openfga.evaluator.expand',
@@ -168,6 +193,9 @@ evaluationRoutes.post('/stores/:storeId/batch-check', validate('json', BatchChec
       const acc: Record<string, { allowed?: boolean, error?: { internal_error?: string, input_error?: string, message?: string } }> = {}
       for (const item of body.checks) {
         try {
+          validateObject(item.tuple_key.object)
+          validateRelation(ctx.index, item.tuple_key.object.split(':')[0]!, item.tuple_key.relation)
+          validateUser(ctx.index, item.tuple_key.user)
           const store = withContextualTuples(pgTupleStore(storeId), item.contextual_tuples?.tuple_keys, ctx.index)
           const allowed = await check(
             ctx.index,

@@ -57,7 +57,7 @@ describe('write route', () => {
   beforeEach(async () => {
     applyTupleMutations.mockReset()
     loadModelIndex.mockReset()
-    loadModelIndex.mockResolvedValue({ modelId: 'model-1', index: modelIndex })
+    loadModelIndex.mockResolvedValue({ modelId: '01M5X4VSFEV23X0B26DAJ26CW2', index: modelIndex })
     // requireStore middleware (openfga-rv0) calls getStore on every
     // /stores/:storeId/* request. Default to a non-null stub so the
     // existing happy-path tests don't 404 at the middleware.
@@ -77,7 +77,7 @@ describe('write route', () => {
     const app = buildApp()
 
     const res = await app.fetch(writeRequest({
-      authorization_model_id: 'model-1',
+      authorization_model_id: '01M5X4VSFEV23X0B26DAJ26CW2',
       writes: {
         tuple_keys: [{ user: 'user:alice', relation: 'editor', object: 'doc:1' }],
       },
@@ -88,7 +88,7 @@ describe('write route', () => {
       code: 'invalid_argument',
       message: 'relation "editor" is not defined for type "doc"',
     })
-    expect(loadModelIndex).toHaveBeenCalledWith('store-1', 'model-1')
+    expect(loadModelIndex).toHaveBeenCalledWith('store-1', '01M5X4VSFEV23X0B26DAJ26CW2')
     expect(applyTupleMutations).not.toHaveBeenCalled()
   })
 
@@ -97,7 +97,7 @@ describe('write route', () => {
     const app = buildApp()
 
     const res = await app.fetch(writeRequest({
-      authorization_model_id: 'missing',
+      authorization_model_id: '01M5X4VSFEV23X0B26DAJ26CW3',
       writes: {
         tuple_keys: [{ user: 'user:alice', relation: 'viewer', object: 'doc:1' }],
       },
@@ -182,9 +182,9 @@ describe('write route', () => {
       },
     }))
 
-    expect(res.status).toBe(409)
+    expect(res.status).toBe(400)
     expect(await res.json()).toEqual({
-      code: 'conflict',
+      code: 'write_failed_due_to_invalid_input',
       message: 'tuple already exists: user:alice viewer doc:1',
     })
   })

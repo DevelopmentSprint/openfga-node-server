@@ -171,7 +171,7 @@ describeIfDb('POST /stores/:storeId/read continuation_token round-trip', () => {
     let safety = 10
     while (safety > 0) {
       const body: Record<string, unknown> = {
-        tuple_key: { user: 'user:alice' },
+        tuple_key: { object: 'doc:', user: 'user:alice' },
         page_size: 1,
       }
       if (token !== undefined) body.continuation_token = token

@@ -57,7 +57,7 @@ describeIfDb('write endpoint semantics', () => {
     expect((await app.fetch(request(storeId, {
       authorization_model_id: modelId,
       writes: { tuple_keys: [tuple] },
-    }))).status).toBe(409)
+    }))).status).toBe(400)
 
     expect((await app.fetch(request(storeId, {
       authorization_model_id: modelId,
@@ -94,7 +94,7 @@ describeIfDb('write endpoint semantics', () => {
       },
     }))
 
-    expect(res.status).toBe(409)
+    expect(res.status).toBe(400)
     const rows = await readTuples(storeId, createdBeforeFailure)
     expect(rows).toEqual([])
   })

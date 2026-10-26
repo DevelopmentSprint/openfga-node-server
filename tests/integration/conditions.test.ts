@@ -39,7 +39,7 @@ async function setup() {
   const base = `/stores/${store.body.id}`
   const model = await request(`${base}/authorization-models`, definition)
   // Existing creation-status difference is tracked in the parity inventory.
-  expect(model.status).toBe(process.env['OPENFGA_REFERENCE_URL'] ? 201 : 200)
+  expect(model.status).toBe(201)
   return base
 }
 const tk = (object = 'document:one', relation = 'reader', user = 'user:anne', context?: Record<string, unknown>) => ({
@@ -117,7 +117,7 @@ describeDb('conditional tuples over HTTP and portable storage', () => {
   it('keeps condition changes out of tuple identity and permits deletion without condition', async () => {
     const base = await setup()
     await request(`${base}/write`, { writes: { tuple_keys: [tk()] } })
-    expect((await request(`${base}/write`, { writes: { tuple_keys: [tk('document:one', 'reader', 'user:anne', { enabled: true })] } })).status).toBe(process.env['OPENFGA_REFERENCE_URL'] ? 400 : 409)
+    expect((await request(`${base}/write`, { writes: { tuple_keys: [tk('document:one', 'reader', 'user:anne', { enabled: true })] } })).status).toBe(400)
     const { condition: _, ...plain } = tk()
     expect((await request(`${base}/write`, { deletes: { tuple_keys: [plain] } })).status).toBe(200)
     expect((await request(`${base}/read`, {})).body.tuples).toEqual([])

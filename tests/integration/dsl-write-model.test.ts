@@ -4,9 +4,9 @@
  * Verifies the four wire cases the feature spec calls out
  * (docs/features/dsl-write-model.md §"Wire Behavior"):
  *
- *   1. application/x-openfga-dsl + valid DSL  → 200 + retrievable model
- *   2. text/plain + valid DSL                  → 200 + retrievable model
- *   3. application/json + JSON model           → 200 (regression — unchanged)
+ *   1. application/x-openfga-dsl + valid DSL  → 201 + retrievable model
+ *   2. text/plain + valid DSL                  → 201 + retrievable model
+ *   3. application/json + JSON model           → 201 (regression — unchanged)
  *   4. application/x-openfga-dsl + invalid DSL → 400 invalid_argument
  *
  * Runs against SQLite by default via the `integration` vitest project;
@@ -41,7 +41,7 @@ describeIfDb('POST /stores/:storeId/authorization-models — content-type negoti
       headers: { 'content-type': 'application/x-openfga-dsl' },
       body: dsl,
     }))
-    expect(writeRes.status).toBe(200)
+    expect(writeRes.status).toBe(201)
     const writeJson = await writeRes.json() as { authorization_model_id: string }
     expect(writeJson.authorization_model_id).toBeTruthy()
 
@@ -63,7 +63,7 @@ describeIfDb('POST /stores/:storeId/authorization-models — content-type negoti
       headers: { 'content-type': 'application/x-openfga-dsl; charset=utf-8' },
       body: dsl,
     }))
-    expect(res.status).toBe(200)
+    expect(res.status).toBe(201)
     const json = await res.json() as { authorization_model_id: string }
     expect(json.authorization_model_id).toBeTruthy()
   })
@@ -78,7 +78,7 @@ describeIfDb('POST /stores/:storeId/authorization-models — content-type negoti
       headers: { 'content-type': 'text/plain' },
       body: dsl,
     }))
-    expect(res.status).toBe(200)
+    expect(res.status).toBe(201)
     const json = await res.json() as { authorization_model_id: string }
     expect(json.authorization_model_id).toBeTruthy()
   })
@@ -94,7 +94,7 @@ describeIfDb('POST /stores/:storeId/authorization-models — content-type negoti
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(modelJson),
     }))
-    expect(res.status).toBe(200)
+    expect(res.status).toBe(201)
     const json = await res.json() as { authorization_model_id: string }
     expect(json.authorization_model_id).toBeTruthy()
   })
@@ -113,7 +113,7 @@ describeIfDb('POST /stores/:storeId/authorization-models — content-type negoti
       headers: { 'content-type': 'application/octet-stream' },
       body: JSON.stringify(modelJson),
     }))
-    expect(res.status).toBe(200)
+    expect(res.status).toBe(201)
     const json = await res.json() as { authorization_model_id: string }
     expect(json.authorization_model_id).toBeTruthy()
   })

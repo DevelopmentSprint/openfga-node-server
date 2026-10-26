@@ -98,7 +98,7 @@ export async function getLatestAuthorizationModel(
     .selectFrom('authorization_model')
     .select(MODEL_COLUMNS)
     .where('store_id', '=', storeId)
-    .orderBy('created_at', 'desc')
+    .orderBy('id', 'desc')
     .limit(1)
     .executeTakeFirst()
   return row ? rowToModel(row) : null
@@ -112,8 +112,18 @@ export async function listAuthorizationModels(
     .selectFrom('authorization_model')
     .select(MODEL_COLUMNS)
     .where('store_id', '=', storeId)
-    .orderBy('created_at', 'desc')
+    .orderBy('id', 'desc')
     .limit(pageSize)
     .execute()
   return rows.map(rowToModel)
+}
+
+/** ULID ordering matches the upstream immutable-model pagination contract. */
+export async function listAuthorizationModelsPage(storeId: string, pageSize: number, after?: string) {
+  let query = getDb().selectFrom('authorization_model').select(MODEL_COLUMNS)
+    .where('store_id', '=', storeId).orderBy('id', 'desc').limit(pageSize + 1)
+  if (after) query = query.where('id', '<', after)
+  const rows = await query.execute()
+  const page = rows.slice(0, pageSize)
+  return { rows: page.map(rowToModel), next: rows.length > pageSize ? page.at(-1)!.id : null }
 }

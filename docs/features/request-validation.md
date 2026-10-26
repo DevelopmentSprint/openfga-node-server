@@ -2,7 +2,9 @@
 
 ## Status
 
-Proposed.
+Implemented in part. The boundary and selected semantic checks are covered by
+local and pinned-reference tests; complete invalid-request conformance remains
+unverified.
 
 ## Source of Truth
 
@@ -14,7 +16,9 @@ Proposed.
 
 The server exposes an OpenFGA-compatible HTTP API. Clients should receive deterministic, client-safe validation errors when request bodies, route parameters, query parameters, or headers do not match the supported OpenFGA surface.
 
-The current implementation performs ad hoc checks in route handlers. That makes validation inconsistent and allows malformed input to reach storage and evaluator code. Request validation should move those checks to the HTTP boundary while preserving OpenFGA-compatible behavior.
+Route schemas validate request shapes at the HTTP boundary. Model-aware checks
+run before persistence or evaluation. Remaining validation differences must be
+verified against the pinned reference server before compatibility is claimed.
 
 ## Goals
 
@@ -92,7 +96,7 @@ When a field is accepted but ignored because the feature is out of scope, the ro
 
 Validation failures should return `400` with a flat, client-safe error body.
 
-Minimum error body:
+The generic shape-validation envelope currently remains:
 
 ```json
 {
@@ -103,7 +107,12 @@ Minimum error body:
 
 The implementation may include structured `details` for field errors if doing so remains compatible with OpenFGA client behavior. Details must not include raw request bodies, secrets, tokens, or raw `ZodError` objects.
 
-Malformed JSON should return the same validation envelope as other invalid request bodies.
+Malformed JSON returns the same generic envelope. Model-semantic failures use
+`invalid_authorization_model`; undefined evaluation types/relations and invalid
+read-filter combinations use `validation_error`; malformed model-list cursors
+use `invalid_continuation_token`. Duplicate or missing tuple mutation conflicts
+return `400 write_failed_due_to_invalid_input`. Exact diagnostic text and the
+full upstream error-code surface remain unverified.
 
 ## Middleware Ordering
 
@@ -122,15 +131,33 @@ Authentication runs before validation so unauthorized callers cannot use validat
 
 ### Stores
 
-`POST /stores` requires a non-empty `name` string after trimming.
+`POST /stores` requires a non-empty `name` string after trimming and returns
+`201`. GET and DELETE on `/stores/:storeId` validate the store ID. GET returns
+the active store; DELETE soft-deletes it and returns `204`, including repeated
+deletes. Store-scoped requests reject deleted stores.
 
 ### Authorization Models
 
-`POST /stores/:storeId/authorization-models` requires `type_definitions` to be an array. `schema_version` defaults to `1.1` when omitted. The schema should allow `conditions` even though the evaluator currently ignores conditional tuples.
+`POST /stores/:storeId/authorization-models` requires a nonempty
+`type_definitions` array and an explicit supported `schema_version` (`1.1` or
+`1.2`). Both JSON and transformed DSL models undergo semantic validation before
+persistence and return `201` on success. Conditions are compiled and validated.
+Invalid references, rewrite structure, type restrictions, computed-alias cycles,
+and recursive relations with no entrypoint are rejected. Input nesting and node
+count are bounded before recursive parsing.
+
+GET model listings accept `page_size` from 1 through 100 and a continuation
+token scoped to the store. Models are listed by descending ULID. An empty
+continuation token indicates exhaustion; a returned token retrieves older
+models without repeating a page.
 
 ### Check
 
-`POST /stores/:storeId/check` requires `tuple_key.user`, `tuple_key.relation`, and `tuple_key.object`.
+`POST /stores/:storeId/check` requires `tuple_key.user`, `tuple_key.relation`,
+and a concrete `tuple_key.object`. The selected model must define the referenced
+types and relations. Successful responses include `allowed` and `resolution`.
+Optional model IDs must be empty or valid ULIDs. Contextual tuple arrays are
+bounded to 100 entries.
 
 The schema should allow OpenFGA request fields such as `authorization_model_id`, `contextual_tuples`, `context`, `trace`, and `consistency`. Unsupported behavior should be handled by the relevant implementation bead, not rejected here unless the OpenFGA contract requires rejection.
 
@@ -142,13 +169,20 @@ Shape validation should cover `writes.tuple_keys`, `writes.on_duplicate`, `delet
 
 ### Read
 
-`POST /stores/:storeId/read` allows omitted `tuple_key`. When present, `tuple_key.object` can be a full object reference or an allowed type-only filter.
+`POST /stores/:storeId/read` allows omitted `tuple_key`. When present, `tuple_key.object` is required and can be a full object reference
+or a type-only filter. A type-only filter also requires `tuple_key.user`; both
+the object ID and user cannot be empty.
 
 ### List Objects
 
 `POST /stores/:storeId/list-objects` requires `type`, `relation`, and `user`.
 
-The schema should allow `authorization_model_id`, `contextual_tuples`, `context`, and `consistency`.
+The schema allows `authorization_model_id`, `contextual_tuples`, `context`, and
+`consistency`. Model types/relations are checked before evaluation.
+`/streamed-list-objects` uses the same validation/evaluator and emits
+newline-delimited `{"result":{"object":"type:id"}}` records after evaluation.
+Incremental graph evaluation and complete streaming-error parity remain outside
+this implementation.
 
 ## Acceptance Criteria
 
@@ -156,7 +190,7 @@ The schema should allow `authorization_model_id`, `contextual_tuples`, `context`
 - Route handlers use Zod-validated values instead of manually parsing unchecked request bodies.
 - Implemented endpoints have route-level schemas for JSON body validation where they accept JSON bodies.
 - Route params and query params that affect behavior are validated before storage calls.
-- Validation errors return client-safe `400` responses with `code: "invalid_argument"`.
+- Validation errors return client-safe `400` responses using the envelopes described under Error Semantics.
 - Raw Zod errors are not returned to clients.
 - Unknown fields are allowed where required for OpenFGA wire compatibility.
 - Tests cover valid requests, malformed JSON, missing required fields, invalid object references, invalid pagination values, and unknown-field compatibility.

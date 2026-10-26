@@ -92,7 +92,7 @@ describeIfDb('openfga-fot regression — cross-store idempotency on /authorizati
     // First call — store A. Succeeds, response cached against
     // (key, fingerprint) where fingerprint includes `/stores/<A>/...`.
     const resA = await app.fetch(writeModelReq(storeA.id, modelBody, sharedKey))
-    expect(resA.status).toBe(200)
+    expect(resA.status).toBe(201)
     const respA = await resA.json() as { authorization_model_id: string }
     expect(typeof respA.authorization_model_id).toBe('string')
 

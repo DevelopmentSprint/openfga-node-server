@@ -101,7 +101,7 @@ describeIfDb('POST /stores/:storeId/expand', () => {
     }))
     expect(res.status).toBe(400)
     const body = await res.json() as { code: string }
-    expect(body.code).toBe('invalid_argument')
+    expect(body.code).toBe('validation_error')
   })
 
   it('rejects type-only object filters at the route boundary (expand needs a full type:id)', async () => {

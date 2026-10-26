@@ -25,6 +25,8 @@ export async function listObjects(
 ): Promise<string[]> {
   if (!model.hasType(objectType)) return []
   const candidates = await gather(model, store, user, objectType, relation, new Set())
+  // Usersets contain themselves even without a persisted membership tuple.
+  if (user.startsWith(`${objectType}:`) && user.includes('#')) candidates.add(user.slice(objectType.length + 1, user.indexOf('#')))
   const out: string[] = []
   for (const oid of candidates) {
     if (await check(model, store, user, relation, `${objectType}:${oid}`, context)) {

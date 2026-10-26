@@ -6,18 +6,17 @@
  *   GET  /stores/:storeId/authorization-models       list models
  *   GET  /stores/:storeId/authorization-models/:id   read model
  */
-import { ModelIndex } from '../evaluator/model-index'
-import { ConditionError } from '../evaluator/conditions'
+import { validateAuthorizationModel } from '../evaluator/model-validation'
 import { Hono } from 'hono'
 import type { AuthorizationModel } from '@openfga/sdk'
 import { transformer } from '@openfga/syntax-transformer'
 import {
   getAuthorizationModel,
-  listAuthorizationModels,
+  listAuthorizationModelsPage,
   writeAuthorizationModel,
 } from '../storage/authorization-models'
 import { validate } from '../middleware/validation'
-import { PageSizeQuery, WriteAuthorizationModelBody } from './schemas'
+import { ModelListQuery, WriteAuthorizationModelBody } from './schemas'
 import { formatDslError, isDslContentType } from './_helpers/dsl'
 
 export const modelsRoutes = new Hono()
@@ -59,14 +58,7 @@ modelsRoutes.post('/stores/:storeId/authorization-models', async (c) => {
     return c.json({ code: 'invalid_argument', message: 'type_definitions required' }, 400)
   }
   try {
-    const index = new ModelIndex(model.type_definitions, model.conditions)
-    for (const td of model.type_definitions) {
-      for (const metadata of Object.values(td.metadata?.relations ?? {})) {
-        for (const ref of metadata.directly_related_user_types ?? []) {
-          if (ref.condition && !index.conditions.has(ref.condition)) throw new ConditionError(`condition '${ref.condition}' is not defined`)
-        }
-      }
-    }
+    validateAuthorizationModel(model)
   }
   catch (err) {
     return c.json({ code: 'invalid_authorization_model', message: err instanceof Error ? err.message : 'invalid model' }, 400)
@@ -76,17 +68,26 @@ modelsRoutes.post('/stores/:storeId/authorization-models', async (c) => {
     type_definitions: model.type_definitions,
     conditions: model.conditions,
   })
-  return c.json({ authorization_model_id: row.id })
+  return c.json({ authorization_model_id: row.id }, 201)
 })
 
 modelsRoutes.get(
   '/stores/:storeId/authorization-models',
-  validate('query', PageSizeQuery),
+  validate('query', ModelListQuery),
   async (c) => {
     const storeId = c.req.param('storeId')
-    const { page_size } = c.req.valid('query')
+    const { page_size, continuation_token } = c.req.valid('query')
     const pageSize = Math.min(page_size ?? 50, 100)
-    const rows = await listAuthorizationModels(storeId, pageSize)
+    let after: string | undefined
+    if (continuation_token) {
+      try {
+        const cursor = JSON.parse(Buffer.from(continuation_token, 'base64url').toString())
+        if (cursor.store !== storeId || typeof cursor.id !== 'string' || !/^[0-9A-HJKMNP-TV-Z]{26}$/.test(cursor.id)) throw new Error('invalid cursor')
+        after = cursor.id
+      }
+      catch { return c.json({ code: 'invalid_continuation_token', message: 'Invalid continuation token' }, 400) }
+    }
+    const { rows, next } = await listAuthorizationModelsPage(storeId, pageSize, after)
     return c.json({
       authorization_models: rows.map(r => ({
         id: r.id,
@@ -94,7 +95,7 @@ modelsRoutes.get(
         type_definitions: r.type_definitions,
         conditions: r.conditions ?? undefined,
       })),
-      continuation_token: '',
+      continuation_token: next ? Buffer.from(JSON.stringify({ store: storeId, id: next })).toString('base64url') : '',
     })
   },
 )

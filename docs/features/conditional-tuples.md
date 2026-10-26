@@ -134,6 +134,9 @@ does not constitute upstream conformance.
 
 ## Other reference-server gaps at baseline
 
+This table preserves the pre-implementation assessment. See the dated update
+below for corrected findings and delivered follow-up work.
+
 This inventory does not approve implementation of additional features. This
 change addresses conditional metadata loss and Check traversal bounds, and
 corrects the migration contract. Other entries remain separate work; wildcard
@@ -162,9 +165,26 @@ Operational reference:
 [upstream server](https://github.com/openfga/openfga/blob/v1.22.0/pkg/server/server.go)
 and [release history](https://github.com/openfga/openfga/releases).
 
-Recommended order after this change: extend differential fixtures; address model validation, traversal bounds, and wildcard
-semantics; complete REST endpoints/pagination; evaluate operational extras only
-against demonstrated deployment requirements.
+### Compatibility follow-up — 2026-10-26
+
+The REST compatibility pass adds model-semantic validation, GetStore and
+idempotent DeleteStore, model cursor pagination, and streamed ListObjects
+framing. It fixes nested ListUsers exclusions, userset self-membership,
+selected request/status differences, and filtering of persisted tuples that no
+longer satisfy the selected model's type restrictions.
+
+Two baseline findings require correction: the v1.22.0 reference server declares
+UpdateStore in its API but returns `unimplemented`; and wildcard-minus-concrete
+ListUsers results intentionally retain the wildcard in that server. Nested
+exclusions still need concrete candidates from subtract branches, now covered
+by reference tests.
+
+The current evidence is 29 core REST scenarios run against both local and pinned
+reference servers (58 executions), plus the 24 condition comparisons. Full
+conformance, exact diagnostics, broader graph/CEL cases, consistency handling,
+and incremental streaming evaluation remain unverified or incomplete. The
+streaming route computes the result before emitting records. The migration
+converter and optional operational capabilities remain separate work.
 
 ## Validation commands and observed differences
 
@@ -176,10 +196,11 @@ to repeat the 24 reference-backed scenarios. The latter suite skips explicitly
 without that environment variable. Point `OPENFGA_DB_URL` at isolated Postgres
 and run migrations before the `integration-pg` condition suite.
 
-The endpoint fixtures explicitly allow pre-existing creation-status (200 vs
-201), duplicate-write status (409 vs 400), and Check `resolution` field
-differences. They compare permission decisions, condition errors, context
-precedence, and metadata, not byte-for-byte equality of every response.
+The original condition comparison allowed creation-status, duplicate-write
+status, and Check `resolution` differences. The compatibility follow-up corrects
+those differences: creation returns `201`, duplicate writes return `400`, and
+Check includes `resolution`. The suites still do not establish byte-for-byte
+equality for every possible response.
 Read/ReadChanges now emit `context: {}` for named conditions with no context,
 as the reference does. Missing declared parameters always fail condition
 evaluation, including unused or short-circuited parameters. Expand lists

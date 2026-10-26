@@ -26,7 +26,7 @@ export async function combineChecks(children: Array<() => Promise<boolean>>, int
 /** Invalid persisted edges under a selected model must never become grants. */
 export function edgeAllowed(model: ModelIndex, type: string, relation: string, edge: TupleEdge): boolean {
   const refs = model.getRelation(type, relation)?.directlyRelatedUserTypes ?? []
-  if (!edge.condition && !refs.some(ref => ref.condition)) return true
+  if (!edge.condition && refs.length === 0) return true
   const [object, userset] = edge.user.split('#')
   const [userType, id] = object!.split(':')
   return refs.some(ref => ref.type === userType && (ref.condition || undefined) === edge.condition?.name
@@ -37,6 +37,7 @@ export async function check(model: ModelIndex, store: TupleStore, user: string, 
   const userType = splitObject(user).type
   async function relationCheck(type: string, id: string, rel: string, path: Set<string>): Promise<boolean> {
     const key = `${type}:${id}#${rel}`
+    if (key === user) return true
     if (path.has(key)) return false
     if (path.size >= 25) throw new ConditionError('authorization model resolution too complex')
     const def = model.getRelation(type, rel)

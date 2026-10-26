@@ -58,6 +58,7 @@ const OBJECT_REF = z.string().regex(/^[A-Za-z0-9_]+:([^:#\s]+(#[A-Za-z0-9_]+)?|\
  */
 const USER_REF = z.string().regex(/^[A-Za-z0-9_]+:([^:#\s]+(#[A-Za-z0-9_]+)?|\*)$/)
 
+const MODEL_ID = z.string().regex(/^(?:[0-9A-HJKMNP-TV-Z]{26})?$/)
 const CONTEXT = z.record(z.string(), z.unknown())
 const CONDITION = z.object({ name: z.string().min(1), context: CONTEXT.optional() })
 const TUPLE_KEY = z.object({
@@ -120,6 +121,11 @@ export const ListStoresQuery = z.object({
   continuation_token: z.string().optional(),
 }).passthrough()
 
+export const ModelListQuery = z.object({
+  page_size: z.coerce.number().int().min(1).max(100).optional(),
+  continuation_token: z.string().optional(),
+})
+
 // ─── POST /stores ─────────────────────────────────────────────────
 
 export const CreateStoreBody = z.object({
@@ -139,10 +145,10 @@ export const WriteAuthorizationModelBody = z.object({
 export const CheckBody = z.object({
   context: CONTEXT.optional(),
   tuple_key: TUPLE_KEY,
-  authorization_model_id: z.string().optional(),
+  authorization_model_id: MODEL_ID.optional(),
   contextual_tuples: z
     .object({
-      tuple_keys: z.array(TUPLE_KEY).optional(),
+      tuple_keys: z.array(TUPLE_KEY).max(100).optional(),
     })
     .passthrough()
     .optional(),
@@ -152,7 +158,7 @@ export const CheckBody = z.object({
 
 export const WriteBody = z
   .object({
-    authorization_model_id: z.string().optional(),
+    authorization_model_id: MODEL_ID.optional(),
     writes: z
       .object({
         tuple_keys: z.array(TUPLE_KEY).min(1),
@@ -195,7 +201,7 @@ const ASSERTION_TUPLE_KEY = z.object({
 const ASSERTION = z.object({
   tuple_key: ASSERTION_TUPLE_KEY,
   expectation: z.boolean(),
-  contextual_tuples: z.array(TUPLE_KEY).optional(),
+  contextual_tuples: z.array(TUPLE_KEY).max(100).optional(),
   // OpenFGA's Assertion.context is typed as `object` (JSON-shaped
   // data for ABAC condition evaluation). Zod's `record(string, unknown)`
   // narrows to `Record<string, unknown>` which is assignable to that
@@ -216,7 +222,7 @@ const USER_TYPE_FILTER = z.object({
 
 export const ListUsersBody = z.object({
   context: CONTEXT.optional(),
-  authorization_model_id: z.string().optional(),
+  authorization_model_id: MODEL_ID.optional(),
   object: z.object({
     type: z.string().min(1),
     id: z.string().min(1),
@@ -228,7 +234,7 @@ export const ListUsersBody = z.object({
   // Note: ListUsersRequest's contextual_tuples is a flat TupleKey[]
   // (not wrapped in {tuple_keys: [...]}) — different from CheckRequest
   // and ListObjectsRequest. Mirror the wire shape exactly.
-  contextual_tuples: z.array(TUPLE_KEY).optional(),
+  contextual_tuples: z.array(TUPLE_KEY).max(100).optional(),
 }).passthrough()
 
 // ─── POST /stores/:storeId/expand ─────────────────────────────────
@@ -238,10 +244,10 @@ export const ExpandBody = z.object({
     relation: z.string().min(1),
     object: OBJECT_REF,
   }).passthrough(),
-  authorization_model_id: z.string().optional(),
+  authorization_model_id: MODEL_ID.optional(),
   contextual_tuples: z
     .object({
-      tuple_keys: z.array(TUPLE_KEY).optional(),
+      tuple_keys: z.array(TUPLE_KEY).max(100).optional(),
     })
     .passthrough()
     .optional(),
@@ -257,7 +263,7 @@ const BatchCheckItem = z.object({
   tuple_key: TUPLE_KEY,
   contextual_tuples: z
     .object({
-      tuple_keys: z.array(TUPLE_KEY).optional(),
+      tuple_keys: z.array(TUPLE_KEY).max(100).optional(),
     })
     .passthrough()
     .optional(),
@@ -270,7 +276,7 @@ export const BATCH_CHECK_MAX_ITEMS = 50
 export const BatchCheckBody = z
   .object({
     checks: z.array(BatchCheckItem).min(1).max(BATCH_CHECK_MAX_ITEMS),
-    authorization_model_id: z.string().optional(),
+    authorization_model_id: MODEL_ID.optional(),
   })
   .passthrough()
   .refine(
@@ -292,10 +298,10 @@ export const ListObjectsBody = z.object({
   type: z.string().min(1),
   relation: z.string().min(1),
   user: USER_REF,
-  authorization_model_id: z.string().optional(),
+  authorization_model_id: MODEL_ID.optional(),
   contextual_tuples: z
     .object({
-      tuple_keys: z.array(TUPLE_KEY).optional(),
+      tuple_keys: z.array(TUPLE_KEY).max(100).optional(),
     })
     .passthrough()
     .optional(),

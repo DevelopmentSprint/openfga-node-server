@@ -5,7 +5,7 @@
  *   POST /stores  create store
  */
 import { Hono } from 'hono'
-import { createStore, listStoresPage } from '../storage/stores'
+import { createStore, listStoresPage, getStore, deleteStore } from '../storage/stores'
 import { validate } from '../middleware/validation'
 import { CreateStoreBody, ListStoresQuery } from './schemas'
 import { decodeStoreCursor, encodeStoreCursor, type StoreCursor } from './_helpers/cursors'
@@ -42,5 +42,16 @@ storesRoutes.post('/stores', validate('json', CreateStoreBody), async (c) => {
     name: row.name,
     created_at: row.created_at,
     updated_at: row.updated_at,
-  })
+  }, 201)
+})
+
+storesRoutes.get('/stores/:storeId', async (c) => {
+  const store = await getStore(c.req.param('storeId'))
+  if (!store) return c.json({ code: 'store_id_not_found', message: 'Store ID not found' }, 404)
+  return c.json(store)
+})
+
+storesRoutes.delete('/stores/:storeId', async (c) => {
+  await deleteStore(c.req.param('storeId'))
+  return c.body(null, 204)
 })
