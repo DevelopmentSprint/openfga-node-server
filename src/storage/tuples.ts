@@ -16,6 +16,7 @@
  * (`user:<id>`), a userset reference (`<type>:<id>#<relation>`), or a
  * typed wildcard (`<type>:*`). The evaluator parses it on read.
  */
+import { DEFAULT_READ_CONTEXT, type ReadContext } from './read-context'
 import { sql } from 'kysely'
 import type { TupleKey, TupleKeyWithoutCondition } from '@openfga/sdk'
 import { getDb, getDialect } from './db'
@@ -259,6 +260,7 @@ export async function readTuplesPage(
   storeId: string,
   filter: ReadFilter,
   cursor: ReadTupleCursor | null,
+  _readContext: ReadContext = DEFAULT_READ_CONTEXT,
 ): Promise<ReadTuplesPage> {
   return traced(
     'storage',
@@ -484,6 +486,7 @@ export async function listUsersForRelation(
   objectType: string,
   objectId: string,
   relation: string,
+  _readContext: ReadContext = DEFAULT_READ_CONTEXT,
 ): Promise<string[]> {
   const rows = await getDb()
     .selectFrom('tuple')
@@ -510,6 +513,7 @@ export async function listObjectIdsForUser(
   objectType: string,
   relation: string,
   userStr: string,
+  _readContext: ReadContext = DEFAULT_READ_CONTEXT,
 ): Promise<string[]> {
   const rows = await getDb()
     .selectFrom('tuple')
@@ -533,6 +537,7 @@ export async function listAllForRelation(
   storeId: string,
   objectType: string,
   relation: string,
+  _readContext: ReadContext = DEFAULT_READ_CONTEXT,
 ): Promise<Array<{ object_id: string, user_str: string }>> {
   return getDb()
     .selectFrom('tuple')
@@ -546,6 +551,7 @@ export async function listAllForRelation(
 /** Full edge data for condition-aware evaluation; legacy lookup helpers remain unchanged. */
 export async function listTuplesForRelation(
   storeId: string, objectType: string, objectId: string, relation: string,
+  _readContext: ReadContext = DEFAULT_READ_CONTEXT,
 ): Promise<Array<{ user: string, condition?: TupleKey['condition'] }>> {
   const rows = await getDb().selectFrom('tuple')
     .select(['user_str', 'condition_name', 'condition_context'])
