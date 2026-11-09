@@ -8,7 +8,7 @@
  */
 import { ModelIndex } from '../evaluator/model-index'
 import { traced } from '../observability/otel'
-import { getAuthorizationModel, getLatestAuthorizationModel } from './authorization-models'
+import { getAuthorizationModel, getLatestAuthorizationModelId } from './authorization-models'
 import {
   listAllForRelation,
   listTuplesForRelation,
@@ -18,6 +18,34 @@ import {
 import type { TupleStore } from '../evaluator/tuple-store'
 
 const _modelCache = new Map<string, ModelIndex>()
+const _modelLoads = new Map<string, Promise<ModelIndex | null>>()
+let cacheGeneration = 0
+
+async function loadPinnedModel(storeId: string, modelId: string): Promise<ModelIndex | null> {
+  const key = `${storeId}:${modelId}`
+  const cached = _modelCache.get(key)
+  if (cached) return cached
+  const pending = _modelLoads.get(key)
+  if (pending) return pending
+
+  const generation = cacheGeneration
+  const load = (async () => {
+    const row = await getAuthorizationModel(storeId, modelId)
+    if (!row) return null
+    const index = new ModelIndex(row.type_definitions, row.conditions ?? {})
+    // A cache reset during an in-flight load must not repopulate the cache.
+    if (cacheGeneration === generation) _modelCache.set(key, index)
+    return index
+  })()
+  _modelLoads.set(key, load)
+  try {
+    return await load
+  }
+  finally {
+    // A failed or missing load is retried on the next request.
+    if (_modelLoads.get(key) === load) _modelLoads.delete(key)
+  }
+}
 
 export async function loadModelIndex(
   storeId: string,
@@ -28,25 +56,20 @@ export async function loadModelIndex(
     'openfga.storage.load_model_index',
     () => ({ 'openfga.store_id': storeId, 'openfga.model_id': modelId ?? '' }),
     async (span) => {
-      const row = modelId
-        ? await getAuthorizationModel(storeId, modelId)
-        : await getLatestAuthorizationModel(storeId)
-      if (!row) return null
-      span.setAttribute('openfga.model_id', row.id)
-      const cacheKey = `${storeId}:${row.id}`
-      let index = _modelCache.get(cacheKey)
-      if (!index) {
-        index = new ModelIndex(row.type_definitions, row.conditions ?? {})
-        _modelCache.set(cacheKey, index)
-      }
-      return { modelId: row.id, index }
+      const resolvedId = modelId || await getLatestAuthorizationModelId(storeId)
+      if (!resolvedId) return null
+      span.setAttribute('openfga.model_id', resolvedId)
+      const index = await loadPinnedModel(storeId, resolvedId)
+      return index ? { modelId: resolvedId, index } : null
     },
   )
 }
 
 /** Test-only. */
 export function clearModelCache(): void {
+  cacheGeneration++
   _modelCache.clear()
+  _modelLoads.clear()
 }
 
 /**

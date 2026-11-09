@@ -10,10 +10,11 @@
  *   - clearModelCache resetting the cache
  *   - pgTupleStore wraps the three evaluator helpers
  */
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { sql } from 'kysely'
 import { getDb, resetDb } from '../../src/storage/db'
 import { createStore } from '../../src/storage/stores'
+import * as models from '../../src/storage/authorization-models'
 import { writeAuthorizationModel } from '../../src/storage/authorization-models'
 import { writeTuples } from '../../src/storage/tuples'
 import { clearModelCache, loadModelIndex, pgTupleStore } from '../../src/storage/engine-context'
@@ -35,6 +36,7 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
+  vi.restoreAllMocks()
   clearModelCache()
   for (const k of ENV_KEYS) {
     if (savedEnv[k] === undefined) delete process.env[k]
@@ -96,6 +98,79 @@ describe('loadModelIndex', () => {
     const b = await loadModelIndex(store.id, model.id)
     // Same instance returned on the second call.
     expect(a?.index).toBe(b?.index)
+  })
+
+  it('does not reread a pinned immutable model, including concurrent requests', async () => {
+    const store = await createStore('s')
+    const model = await writeAuthorizationModel(store.id, { schema_version: '1.1', type_definitions: [{ type: 'user' }] })
+    const read = vi.spyOn(models, 'getAuthorizationModel')
+    const contexts = await Promise.all(Array.from({ length: 10 }, () => loadModelIndex(store.id, model.id)))
+    expect(read).toHaveBeenCalledTimes(1)
+    expect(contexts.every(ctx => ctx?.index === contexts[0]?.index)).toBe(true)
+    await loadModelIndex(store.id, model.id)
+    expect(read).toHaveBeenCalledTimes(1)
+  })
+
+  it('resolves latest on every request but reads each immutable payload only once', async () => {
+    const store = await createStore('s')
+    const first = await writeAuthorizationModel(store.id, { schema_version: '1.1', type_definitions: [{ type: 'user' }] })
+    const read = vi.spyOn(models, 'getAuthorizationModel')
+    const latest = vi.spyOn(models, 'getLatestAuthorizationModelId')
+    const old = await loadModelIndex(store.id, undefined)
+    expect((await loadModelIndex(store.id, undefined))?.index).toBe(old?.index)
+    expect(read).toHaveBeenCalledTimes(1)
+    const second = await writeAuthorizationModel(store.id, { schema_version: '1.1', type_definitions: [{ type: 'user' }, { type: 'doc' }] })
+    const current = await loadModelIndex(store.id, undefined)
+    expect(current?.modelId).toBe(second.id)
+    expect(current?.index.hasType('doc')).toBe(true)
+    expect((await loadModelIndex(store.id, first.id))?.index).toBe(old?.index)
+    expect(read).toHaveBeenCalledTimes(2)
+    expect(latest).toHaveBeenCalledTimes(3)
+  })
+
+  it('isolates cached models by store', async () => {
+    const a = await createStore('a')
+    const b = await createStore('b')
+    const model = await writeAuthorizationModel(a.id, { schema_version: '1.1', type_definitions: [{ type: 'user' }] })
+    expect(await loadModelIndex(a.id, model.id)).not.toBeNull()
+    expect(await loadModelIndex(b.id, model.id)).toBeNull()
+  })
+
+  it('retries failed loads rather than caching errors', async () => {
+    const store = await createStore('s')
+    const model = await writeAuthorizationModel(store.id, { schema_version: '1.1', type_definitions: [{ type: 'user' }] })
+    const read = vi.spyOn(models, 'getAuthorizationModel').mockRejectedValueOnce(new Error('unavailable'))
+    await expect(loadModelIndex(store.id, model.id)).rejects.toThrow('unavailable')
+    expect(await loadModelIndex(store.id, model.id)).not.toBeNull()
+    expect(read).toHaveBeenCalledTimes(2)
+  })
+
+  it('retries missing models rather than retaining negative cache entries', async () => {
+    const store = await createStore('s')
+    const read = vi.spyOn(models, 'getAuthorizationModel')
+    expect(await loadModelIndex(store.id, 'missing')).toBeNull()
+    expect(await loadModelIndex(store.id, 'missing')).toBeNull()
+    expect(read).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not repopulate the cache when an in-flight load crosses a reset', async () => {
+    const store = await createStore('s')
+    const model = await writeAuthorizationModel(store.id, { schema_version: '1.1', type_definitions: [{ type: 'user' }] })
+    let release!: () => void
+    const gate = new Promise<void>(resolve => { release = resolve })
+    const read = vi.spyOn(models, 'getAuthorizationModel').mockImplementationOnce(async () => {
+      await gate
+      return model
+    })
+    const pending = loadModelIndex(store.id, model.id)
+    // loadModelIndex begins synchronously when tracing is disabled (test default).
+    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(1))
+    clearModelCache()
+    release()
+    const old = await pending
+    const fresh = await loadModelIndex(store.id, model.id)
+    expect(read).toHaveBeenCalledTimes(2)
+    expect(fresh?.index).not.toBe(old?.index)
   })
 
   it('clearModelCache forces a fresh ModelIndex on next load', async () => {

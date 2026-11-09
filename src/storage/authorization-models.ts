@@ -91,6 +91,14 @@ export async function getAuthorizationModel(
   return row ? rowToModel(row) : null
 }
 
+/** Resolve latest without transferring or decoding the immutable model payload. */
+export async function getLatestAuthorizationModelId(storeId: string): Promise<string | null> {
+  const row = await getDb().selectFrom('authorization_model')
+    .select('id').where('store_id', '=', storeId).orderBy('id', 'desc')
+    .limit(1).executeTakeFirst()
+  return row?.id ?? null
+}
+
 export async function getLatestAuthorizationModel(
   storeId: string,
 ): Promise<AuthorizationModelRow | null> {
