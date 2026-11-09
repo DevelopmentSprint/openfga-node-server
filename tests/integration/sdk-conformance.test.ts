@@ -17,7 +17,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { serve, type ServerType } from '@hono/node-server'
-import { OpenFgaClient } from '@openfga/sdk'
+import { OpenFgaClient, ConsistencyPreference } from '@openfga/sdk'
 import { buildApp } from '../../src/routes/index'
 import { bootstrapIntegrationDb } from '../_helpers/integration-bootstrap'
 
@@ -272,4 +272,17 @@ describeIfDb('@openfga/sdk conformance — OpenFgaClient against a live server',
       expect(res.status, `${method} ${path}`).not.toBe(501)
     }
   })
+  it.each(Object.values(ConsistencyPreference))('consistency: SDK serializes %s on reads', async (consistency) => {
+    const { client } = await setupStoreAndModel()
+    const tuple = { user: 'user:alice', relation: 'viewer', object: 'doc:1' }
+    await client.write({ writes: [tuple] })
+    const options = { consistency }
+    expect((await client.check(tuple, options)).allowed).toBe(true)
+    expect((await client.listObjects({ user: tuple.user, relation: tuple.relation, type: 'doc' }, options)).objects).toContain('doc:1')
+    expect((await client.expand({ object: tuple.object, relation: tuple.relation }, options)).tree).toBeDefined()
+    expect((await client.read({ object: tuple.object }, options)).tuples).toHaveLength(1)
+    expect((await client.listUsers({ object: { type: 'doc', id: '1' }, relation: tuple.relation, user_filters: [{ type: 'user' }] }, options)).users).toContainEqual({ object: { type: 'user', id: 'alice' } })
+    expect((await client.batchCheck({ checks: [{ ...tuple, correlationId: 'a' }] }, options)).result[0]?.allowed).toBe(true)
+  })
+
 })

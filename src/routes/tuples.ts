@@ -6,6 +6,7 @@
  *   GET  /stores/:storeId/changes  tuple changelog (cursor-paginated,
  *                                  oldest-first, polling-tail semantics)
  */
+import { readContext } from '../storage/read-context'
 import { Hono } from 'hono'
 import {
   DuplicateTupleError,
@@ -97,6 +98,7 @@ tuplesRoutes.post('/stores/:storeId/read', validate('json', ReadBody), async (c)
         pageSize: body.page_size,
       },
       cursor,
+      readContext(body.consistency),
     )
   }
   catch (err) {

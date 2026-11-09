@@ -6,8 +6,8 @@
  *
  *   - use snake_case to match the OpenFGA wire format,
  *   - allow unknown fields via `.passthrough()` so OpenFGA SDK clients
- *     can send forward-compatible fields like `consistency`, `context`,
- *     `trace`, etc., that this server does not yet read,
+ *     can send forward-compatible fields like `trace`,
+ *     etc., that this server does not yet read,
  *   - validate enough shape to keep malformed input out of the storage
  *     and evaluator layers, but stop short of model-aware validation
  *     (that belongs to the write/check evaluator behavior).
@@ -16,6 +16,8 @@
  * scope and the rationale for each carve-out.
  */
 import { z } from 'zod'
+
+const CONSISTENCY = z.enum(['UNSPECIFIED', 'MINIMIZE_LATENCY', 'HIGHER_CONSISTENCY']).nullish()
 
 // ─── Shared primitives ────────────────────────────────────────────
 
@@ -143,6 +145,7 @@ export const WriteAuthorizationModelBody = z.object({
 // ─── POST /stores/:storeId/check ──────────────────────────────────
 
 export const CheckBody = z.object({
+  consistency: CONSISTENCY,
   context: CONTEXT.optional(),
   tuple_key: TUPLE_KEY,
   authorization_model_id: MODEL_ID.optional(),
@@ -182,6 +185,7 @@ export const WriteBody = z
 // ─── POST /stores/:storeId/read ───────────────────────────────────
 
 export const ReadBody = z.object({
+  consistency: CONSISTENCY,
   tuple_key: TUPLE_KEY_FILTER.optional(),
   // Reject 0: a page of zero rows is meaningless on the wire and
   // would otherwise reach readTuplesPage's slice logic which assumes
@@ -221,6 +225,7 @@ const USER_TYPE_FILTER = z.object({
 }).passthrough()
 
 export const ListUsersBody = z.object({
+  consistency: CONSISTENCY,
   context: CONTEXT.optional(),
   authorization_model_id: MODEL_ID.optional(),
   object: z.object({
@@ -240,6 +245,7 @@ export const ListUsersBody = z.object({
 // ─── POST /stores/:storeId/expand ─────────────────────────────────
 
 export const ExpandBody = z.object({
+  consistency: CONSISTENCY,
   tuple_key: z.object({
     relation: z.string().min(1),
     object: OBJECT_REF,
@@ -275,6 +281,7 @@ export const BATCH_CHECK_MAX_ITEMS = 50
 
 export const BatchCheckBody = z
   .object({
+    consistency: CONSISTENCY,
     checks: z.array(BatchCheckItem).min(1).max(BATCH_CHECK_MAX_ITEMS),
     authorization_model_id: MODEL_ID.optional(),
   })
@@ -294,6 +301,7 @@ export const BatchCheckBody = z
 // ─── POST /stores/:storeId/list-objects ───────────────────────────
 
 export const ListObjectsBody = z.object({
+  consistency: CONSISTENCY,
   context: CONTEXT.optional(),
   type: z.string().min(1),
   relation: z.string().min(1),
