@@ -6,6 +6,7 @@
  * row + rebuilding the index per request would be wasteful — the model
  * is immutable once written, so we cache by id.
  */
+import { DEFAULT_READ_CONTEXT, type ReadContext } from './read-context'
 import { ModelIndex } from '../evaluator/model-index'
 import { traced } from '../observability/otel'
 import { getAuthorizationModel, getLatestAuthorizationModelId } from './authorization-models'
@@ -73,18 +74,19 @@ export function clearModelCache(): void {
 }
 
 /**
- * Postgres-backed `TupleStore` adapter. Closes over `storeId` so the
- * evaluator does not need to know which store it's serving.
+ * Request-scoped `TupleStore` adapter for both database dialects. The wrapper
+ * carries the read preference through recursive evaluation and contextual
+ * overlays without exposing storage policy to the evaluator.
  */
-export function pgTupleStore(storeId: string): TupleStore {
+export function pgTupleStore(storeId: string, context: ReadContext = DEFAULT_READ_CONTEXT): TupleStore {
   return {
     listTuplesForRelation: (objectType, objectId, relation) =>
-      listTuplesForRelation(storeId, objectType, objectId, relation),
+      listTuplesForRelation(storeId, objectType, objectId, relation, context),
     listUsersForRelation: (objectType, objectId, relation) =>
-      listUsersForRelation(storeId, objectType, objectId, relation),
+      listUsersForRelation(storeId, objectType, objectId, relation, context),
     listObjectIdsForUser: (objectType, relation, userStr) =>
-      listObjectIdsForUser(storeId, objectType, relation, userStr),
+      listObjectIdsForUser(storeId, objectType, relation, userStr, context),
     listAllForRelation: (objectType, relation) =>
-      listAllForRelation(storeId, objectType, relation),
+      listAllForRelation(storeId, objectType, relation, context),
   }
 }

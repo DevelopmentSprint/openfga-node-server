@@ -8,6 +8,7 @@
  *   POST /stores/:storeId/list-objects  objects of `type` the user has `relation` on
  *   POST /stores/:storeId/list-users    users with `relation` on a given object
  */
+import { readContext } from '../storage/read-context'
 import { logger } from '../logger'
 import { ConditionError } from '../evaluator/conditions'
 import { Hono } from 'hono'
@@ -37,7 +38,7 @@ evaluationRoutes.post('/stores/:storeId/check', validate('json', CheckBody), asy
   const tk = body.tuple_key
   const ctx = await loadModelIndex(storeId, body.authorization_model_id)
   if (!ctx) return c.json({ code: 'not_found', message: 'authorization model not found' }, 404)
-  const store = withContextualTuples(pgTupleStore(storeId), body.contextual_tuples?.tuple_keys, ctx.index)
+  const store = withContextualTuples(pgTupleStore(storeId, readContext(body.consistency)), body.contextual_tuples?.tuple_keys, ctx.index)
   validateObject(tk.object)
   validateRelation(ctx.index, tk.object.split(':')[0]!, tk.relation)
   validateUser(ctx.index, tk.user)
@@ -60,7 +61,7 @@ evaluationRoutes.post(path, validate('json', ListObjectsBody), async (c) => {
   const body = c.req.valid('json')
   const ctx = await loadModelIndex(storeId, body.authorization_model_id)
   if (!ctx) return c.json({ code: 'not_found', message: 'authorization model not found' }, 404)
-  const store = withContextualTuples(pgTupleStore(storeId), body.contextual_tuples?.tuple_keys, ctx.index)
+  const store = withContextualTuples(pgTupleStore(storeId, readContext(body.consistency)), body.contextual_tuples?.tuple_keys, ctx.index)
   validateRelation(ctx.index, body.type, body.relation)
   validateUser(ctx.index, body.user)
   const ids = await traced(
@@ -105,7 +106,7 @@ evaluationRoutes.post('/stores/:storeId/list-users', validate('json', ListUsersB
 
   // ListUsersRequest's contextual_tuples is a flat array (unlike
   // check/list-objects) — adapt to the same overlay helper.
-  const store = withContextualTuples(pgTupleStore(storeId), body.contextual_tuples, ctx.index)
+  const store = withContextualTuples(pgTupleStore(storeId, readContext(body.consistency)), body.contextual_tuples, ctx.index)
   const users = await traced(
     'evaluator',
     'openfga.evaluator.list_users',
@@ -153,7 +154,7 @@ evaluationRoutes.post('/stores/:storeId/expand', validate('json', ExpandBody), a
     return c.json({ code: 'invalid_argument', message: 'tuple_key.object must be a full type:id reference' }, 400)
   }
 
-  const store = withContextualTuples(pgTupleStore(storeId), body.contextual_tuples?.tuple_keys, ctx.index)
+  const store = withContextualTuples(pgTupleStore(storeId, readContext(body.consistency)), body.contextual_tuples?.tuple_keys, ctx.index)
   validateRelation(ctx.index, objectType, body.tuple_key.relation)
   const root = await traced(
     'evaluator',
@@ -196,7 +197,7 @@ evaluationRoutes.post('/stores/:storeId/batch-check', validate('json', BatchChec
           validateObject(item.tuple_key.object)
           validateRelation(ctx.index, item.tuple_key.object.split(':')[0]!, item.tuple_key.relation)
           validateUser(ctx.index, item.tuple_key.user)
-          const store = withContextualTuples(pgTupleStore(storeId), item.contextual_tuples?.tuple_keys, ctx.index)
+          const store = withContextualTuples(pgTupleStore(storeId, readContext(body.consistency)), item.contextual_tuples?.tuple_keys, ctx.index)
           const allowed = await check(
             ctx.index,
             store,
