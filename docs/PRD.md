@@ -195,6 +195,14 @@ the configured namespace (`OPENFGA_DB_NAMESPACE`, default `openfga`)
 for operational simplicity. Operational data is not part of the upstream
 migration contract; see §Migration path FROM this server TO upstream OpenFGA.
 
+### Optional write fencing
+
+Lease-based single writers may acquire a monotonically increasing generation per store and queue key and attach it to tuple writes. The extension is off by default (`writeFences.enabled`, `OPENFGA_WRITE_FENCES_ENABLED`); while it is off the API surface is identical to upstream OpenFGA: the acquisition route does not exist and fence headers are ignored. When it is on, acquisition uses an extension path prefix outside the upstream path space (`PUT /x-ext/stores/{store_id}/write-fences/{key}`) with the same authentication and store checks as store routes, and tuple writes carry `X-Write-Fence-Key`, `X-Write-Fence-Generation` and `X-Not-After` headers. Standard writes without those headers are unchanged.
+
+The server validates and holds the fence in the same transaction as tuple and change-log mutations. Safety invariant: after a successor's acquisition commits, no tuple mutation under a predecessor generation can commit. Malformed fence input is rejected with `400 validation_error`; stale or unacquired generations with `409 write_fence_rejected`; expired deadlines with `409 write_deadline_exceeded`. Fence checks run before idempotent replay, so a cached response never bypasses them.
+
+Not-after timestamps reject late admission and support cooperative cancellation only. They do not guarantee an absolute commit-time cutoff. Fence state is operational metadata: namespaced on both supported backends, kept for the store's lifetime and never exported. The protocol, error codes and clock assumptions are specified in [Durable write fences](features/write-fences.md).
+
 ### OpenTelemetry observability
 
 The server supports OpenTelemetry tracing at the HTTP middleware

@@ -41,6 +41,9 @@ export const tuplesRoutes = new Hono()
 tuplesRoutes.post('/stores/:storeId/write', validate('json', WriteBody), async (c) => {
   const storeId = c.req.param('storeId')
   const body = c.req.valid('json')
+  // Set only by the write-fence preflight, which is mounted only when
+  // the extension is enabled; otherwise fence headers are ignored.
+  const { deadline, fence } = c.get('writeContext') ?? {}
   const writes = body.writes?.tuple_keys ?? []
   const deletes = body.deletes?.tuple_keys ?? []
 
@@ -70,6 +73,8 @@ tuplesRoutes.post('/stores/:storeId/write', validate('json', WriteBody), async (
 
   try {
     await applyTupleMutations(storeId, {
+      deadline,
+      fence,
       writes,
       deletes,
       onDuplicate: onDuplicate as TupleConflictMode,
