@@ -84,13 +84,13 @@ describeIfDb('POST /stores/:storeId/expand', () => {
     expect(json.tree.root.leaf?.users?.users).toEqual(['user:carol'])
   })
 
-  it('returns 404 when the requested authorization_model_id does not exist', async () => {
+  it('returns 400 when the requested authorization_model_id does not exist', async () => {
     const { app, storeId } = await setup()
     const res = await app.fetch(expandReq(storeId, {
       authorization_model_id: '01ZZZZZZZZZZZZZZZZZZZZZZZZ',
       tuple_key: { object: 'doc:1', relation: 'viewer' },
     }))
-    expect(res.status).toBe(404)
+    expect(res.status).toBe(400)
   })
 
   it('returns 400 when the requested relation is not defined on the type', async () => {
@@ -133,10 +133,10 @@ describeIfDb('POST /stores/:storeId/expand', () => {
     }))
     const tuple_key = { object: 'doc:1', relation: 'viewer' }
     const pinned = await post({ authorization_model_id: '01ZZZZZZZZZZZZZZZZZZZZZZZZ', tuple_key })
-    expect(pinned.status).toBe(404)
+    expect(pinned.status).toBe(400)
     expect(((await pinned.json()) as { code: string }).code).toBe('authorization_model_not_found')
     const latest = await post({ tuple_key })
-    expect(latest.status).toBe(404)
+    expect(latest.status).toBe(400)
     expect(((await latest.json()) as { code: string }).code).toBe('latest_authorization_model_not_found')
   })
 

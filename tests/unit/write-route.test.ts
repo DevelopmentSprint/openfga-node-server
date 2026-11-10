@@ -103,7 +103,7 @@ describe('write route', () => {
       },
     }))
 
-    expect(res.status).toBe(404)
+    expect(res.status).toBe(400)
     expect(await res.json()).toEqual({ code: 'authorization_model_not_found', message: expect.stringContaining('not found') })
     expect(applyTupleMutations).not.toHaveBeenCalled()
   })
