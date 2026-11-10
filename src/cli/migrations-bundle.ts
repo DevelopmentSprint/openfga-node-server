@@ -25,6 +25,7 @@ import * as tupleChangeSeq from '../../migrations/1778083200000_tuple-change-seq
 
 import * as tupleConditions from '../../migrations/1793012400000_tuple-conditions'
 import * as readAndModelIndexes from '../../migrations/1794300100000_read-and-model-indexes'
+import * as idempotencyClaimToken from '../../migrations/1794400000000_idempotency-claim-token'
 import * as authorizationModelSeq from '../../migrations/1794400100000_authorization-model-seq'
 
 export const MIGRATIONS: Record<string, Migration> = {
@@ -35,6 +36,7 @@ export const MIGRATIONS: Record<string, Migration> = {
   '1778083200000_tuple-change-seq': tupleChangeSeq,
   '1793012400000_tuple-conditions': tupleConditions,
   '1794300100000_read-and-model-indexes': readAndModelIndexes,
+  '1794400000000_idempotency-claim-token': idempotencyClaimToken,
   '1794400100000_authorization-model-seq': authorizationModelSeq,
 }
 

@@ -81,7 +81,10 @@ export interface IdempotencyKeyTable {
   key: string
   request_hash: string
   status: 'in_flight' | 'completed'
+  // Real HTTP status of a completed response; NULL while in flight.
   response_status: ColumnType<number | null, number | null | undefined, number | null>
+  // In-flight claim token (openfga-k2a.14); NULL once completed.
+  claim_token: ColumnType<string | null, string | null | undefined, string | null>
   // ColumnType (not JSONColumnType) is deliberate here. Idempotency
   // response payloads are heterogeneous (any successful endpoint's
   // response shape), so the select type stays `unknown` for callers

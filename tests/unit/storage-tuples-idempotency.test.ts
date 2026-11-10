@@ -201,7 +201,7 @@ describe('idempotency (Kysely port)', () => {
   const FP = 'fingerprint-A'
   const TTL = 60_000
 
-  async function claimToken(key = KEY, fp = FP, opts?: { inFlightLeaseMs?: number }): Promise<number> {
+  async function claimToken(key = KEY, fp = FP, opts?: { inFlightLeaseMs?: number }): Promise<string> {
     const result = await claimKey(key, fp, TTL, opts)
     if (result.kind !== 'claimed') throw new Error(`expected claimed, got ${result.kind}`)
     return result.token
@@ -210,7 +210,7 @@ describe('idempotency (Kysely port)', () => {
   it('claimKey returns claimed with a claim token for a fresh key', async () => {
     const result = await claimKey(KEY, FP, TTL)
     expect(result.kind).toBe('claimed')
-    if (result.kind === 'claimed') expect(typeof result.token).toBe('number')
+    if (result.kind === 'claimed') expect(typeof result.token).toBe('string')
   })
 
   it('claimKey returns in_flight when an earlier claim is still in flight', async () => {
@@ -272,6 +272,15 @@ describe('idempotency (Kysely port)', () => {
     await claimToken()
     await sql`update openfga_idempotency_keys set created_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-30 seconds') where key = ${KEY}`.execute(getDb())
     expect(await claimKey(KEY, FP, 86_400_000)).toEqual({ kind: 'in_flight' })
+  })
+
+  // openfga-k2a.14 — the claim token lives in claim_token, not response_status.
+  it('an in-flight claim writes claim_token and leaves response_status NULL; completion clears the token', async () => {
+    const token = await claimToken()
+    const row = async () => (await sql<{ claim_token: string | null, response_status: number | null }>`select claim_token, response_status from openfga_idempotency_keys where key = ${KEY}`.execute(getDb())).rows[0]
+    expect(await row()).toEqual({ claim_token: token, response_status: null })
+    expect(await completeKey(KEY, token, 201, { ok: true })).toBe(true)
+    expect(await row()).toEqual({ claim_token: null, response_status: 201 })
   })
 
   it('a stale owner cannot complete over or release the new owner\'s claim', async () => {

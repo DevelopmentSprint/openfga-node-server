@@ -45,6 +45,11 @@
  *
  * Storage failures bubble up as 503 so retries can succeed once the
  * store recovers.
+ *
+ * Only 2xx responses are recorded and replayed (openfga-k2a.14). Any
+ * other status (4xx or 5xx) or a thrown handler releases the claim,
+ * so a retry with the same key re-runs the request instead of
+ * replaying a cached failure.
  */
 import { createHash } from 'node:crypto'
 import type { MiddlewareHandler } from 'hono'
@@ -89,6 +94,9 @@ const ERROR_ENVELOPES = {
   mismatch: { code: 'idempotency_fingerprint_mismatch', message: 'Idempotency-Key was reused with a different request fingerprint' },
   unavailable: { code: 'idempotency_store_unavailable', message: 'idempotency store is unavailable; retry later' },
 } as const
+
+/** Statuses whose Response must not carry a body (Fetch spec). */
+const NULL_BODY_STATUSES = new Set([204, 205, 304])
 
 function pathMatches(routePattern: string, requestPath: string): boolean {
   if (routePattern === requestPath) return true
@@ -201,6 +209,13 @@ export function idempotencyMiddleware(options: IdempotencyOptions): MiddlewareHa
     }
     if (claim.kind === 'replay') {
       logger.info({ ...keyLog, replay_status: claim.status }, 'idempotency_replay')
+      // An empty original body (e.g. 204) is stored as NULL and must
+      // replay as an empty body: `new Response('null', { status: 204 })`
+      // throws, and any other status would otherwise replay a literal
+      // `null` the handler never sent.
+      if (claim.body === null || claim.body === undefined || NULL_BODY_STATUSES.has(claim.status)) {
+        return new Response(null, { status: claim.status })
+      }
       return new Response(JSON.stringify(claim.body), {
         status: claim.status,
         headers: { 'content-type': 'application/json' },
@@ -208,8 +223,8 @@ export function idempotencyMiddleware(options: IdempotencyOptions): MiddlewareHa
     }
 
     // claim.kind === 'claimed' — we own the slot. Run the handler,
-    // capture the response, persist it for replay (or drop the slot
-    // on 5xx so retries can succeed). Every follow-up write carries
+    // capture the response, persist it for replay when it is 2xx (or
+    // drop the slot otherwise so retries re-run the request). Every follow-up write carries
     // the claim token so it is a no-op if our lease expired and
     // another request reclaimed the key meanwhile.
     const { token } = claim
@@ -232,8 +247,8 @@ export function idempotencyMiddleware(options: IdempotencyOptions): MiddlewareHa
     }
 
     const status = c.res.status
-    if (status >= 500) {
-      logger.info({ ...keyLog, status }, 'idempotency_release_5xx')
+    if (status < 200 || status >= 300) {
+      logger.info({ ...keyLog, status }, 'idempotency_release_non_2xx')
       await release()
       return
     }
@@ -242,7 +257,8 @@ export function idempotencyMiddleware(options: IdempotencyOptions): MiddlewareHa
     try {
       const cloned = c.res.clone()
       const text = await cloned.text()
-      body = text === '' ? null : JSON.parse(text)
+      // Empty body → undefined → stored as SQL NULL → replayed empty.
+      body = text === '' ? undefined : JSON.parse(text)
     }
     catch (err) {
       logger.warn({ err, ...keyLog }, 'idempotency_response_capture_failed')

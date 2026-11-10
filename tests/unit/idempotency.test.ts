@@ -22,7 +22,7 @@ vi.mock('../../src/storage/idempotency.js', () => ({
 const { idempotencyMiddleware, MAX_IDEMPOTENCY_KEY_LENGTH, scopedIdempotencyKey } = await import('../../src/middleware/idempotency.js')
 const { ANONYMOUS_PRINCIPAL, setAuthPrincipal } = await import('../../src/middleware/caller.js')
 
-const TOKEN = -42
+const TOKEN = '11111111-2222-4333-8444-555555555555'
 const CLAIMED = { kind: 'claimed', token: TOKEN }
 const anon = (key: string): string => scopedIdempotencyKey(ANONYMOUS_PRINCIPAL, key)
 
@@ -178,6 +178,57 @@ describe('idempotency middleware — mode=optional', () => {
     expect(res.status).toBe(500)
     expect(releaseKey).toHaveBeenCalledWith(anon('abc'), TOKEN)
     expect(completeKey).not.toHaveBeenCalled()
+  })
+
+  // openfga-k2a.14 — only 2xx responses are recorded and replayed.
+  it.each([400, 404, 409, 422])('releases the slot (does not persist) when the handler returns %i', async (status) => {
+    claimKey.mockResolvedValueOnce(CLAIMED)
+    releaseKey.mockResolvedValueOnce(true)
+
+    const app = buildApp({ mode: 'optional', status, handler: () => ({ code: 'validation_error' }) })
+    const res = await app.fetch(reqJson('/stores', { name: 'first' }, { 'Idempotency-Key': 'abc' }))
+
+    expect(res.status).toBe(status)
+    expect(await res.json()).toEqual({ code: 'validation_error' })
+    expect(releaseKey).toHaveBeenCalledWith(anon('abc'), TOKEN)
+    expect(completeKey).not.toHaveBeenCalled()
+  })
+
+  it('persists a 201 response', async () => {
+    claimKey.mockResolvedValueOnce(CLAIMED)
+    completeKey.mockResolvedValueOnce(true)
+    const app = buildApp({ mode: 'optional', status: 201 })
+    const res = await app.fetch(reqJson('/stores', { name: 'first' }, { 'Idempotency-Key': 'abc' }))
+    expect(res.status).toBe(201)
+    expect(completeKey.mock.calls[0]![2]).toBe(201)
+    expect(releaseKey).not.toHaveBeenCalled()
+  })
+
+  it('stores an empty 204 body as undefined and replays it as an empty body', async () => {
+    claimKey.mockResolvedValueOnce(CLAIMED)
+    completeKey.mockResolvedValueOnce(true)
+    const app = new Hono()
+    app.use('*', idempotencyMiddleware({ mode: 'optional', ttlMs: 60_000, scopes: [{ method: 'POST', path: '/stores' }] }))
+    app.post('/stores', c => c.body(null, 204))
+
+    const first = await app.fetch(reqJson('/stores', {}, { 'Idempotency-Key': 'abc' }))
+    expect(first.status).toBe(204)
+    const [, , status, body] = completeKey.mock.calls[0]!
+    expect(status).toBe(204)
+    expect(body).toBeUndefined()
+
+    claimKey.mockResolvedValueOnce({ kind: 'replay', status: 204, body: null })
+    const replay = await app.fetch(reqJson('/stores', {}, { 'Idempotency-Key': 'abc' }))
+    expect(replay.status).toBe(204)
+    expect(await replay.text()).toBe('')
+  })
+
+  it('replays a stored NULL body on a 200 as an empty body, not the literal "null"', async () => {
+    claimKey.mockResolvedValueOnce({ kind: 'replay', status: 200, body: null })
+    const app = buildApp({ mode: 'optional' })
+    const res = await app.fetch(reqJson('/stores', {}, { 'Idempotency-Key': 'abc' }))
+    expect(res.status).toBe(200)
+    expect(await res.text()).toBe('')
   })
 
   it('releases the slot and propagates when the handler throws', async () => {

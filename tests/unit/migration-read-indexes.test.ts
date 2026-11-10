@@ -61,14 +61,11 @@ describe('read-and-model-indexes migration (SQLite)', () => {
     const before = (await indexes('openfga_tuple')).map(i => i.name).sort()
     const beforeModel = (await indexes('openfga_authorization_model')).map(i => i.name).filter(n => !n.includes('seq')).sort()
     const migrator = buildMigrator()
-    // Newer migrations sit on top; roll back until this one is undone.
-    let down = await migrator.migrateDown()
-    while (down.results?.[0]?.migrationName !== '1794300100000_read-and-model-indexes') {
-      expect(down.error).toBeUndefined()
-      down = await migrator.migrateDown()
-    }
+    // Roll back to the migration before this one (later migrations,
+    // e.g. claim-token and model-seq, are undone too).
+    const down = await migrator.migrateTo('1793012400000_tuple-conditions')
     expect(down.error).toBeUndefined()
-    expect(down.results?.[0]?.migrationName).toBe('1794300100000_read-and-model-indexes')
+    expect(down.results?.map(r => r.migrationName)).toContain('1794300100000_read-and-model-indexes')
     const after = (await indexes('openfga_tuple')).map(i => i.name).sort()
     const afterModel = (await indexes('openfga_authorization_model')).map(i => i.name).sort()
     expect(before.filter(n => !after.includes(n))).toEqual(['openfga_idx_tuple_store_read_order'])
