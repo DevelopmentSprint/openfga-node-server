@@ -1,3 +1,4 @@
+import { assertWriteDeadline, lockWriteFence, type WriteDeadline, type WriteFence } from './write-fences'
 /**
  * Repository for `openfga.tuple` rows.
  *
@@ -90,6 +91,8 @@ export interface ReadTuplesPage {
 export type TupleConflictMode = 'error' | 'ignore'
 
 export interface TupleMutations {
+  deadline?: WriteDeadline
+  fence?: WriteFence
   writes: TupleKey[] | TupleKeyWithoutCondition[]
   deletes: TupleKeyWithoutCondition[] | TupleKey[]
   onDuplicate: TupleConflictMode
@@ -128,7 +131,14 @@ async function applyTupleMutationsImpl(
   storeId: string,
   mutations: TupleMutations,
 ): Promise<void> {
+  assertWriteDeadline(mutations.deadline)
   await getDb().transaction().execute(async (trx) => {
+    let deadline = mutations.deadline
+    if (mutations.fence) {
+      if (!deadline) throw new Error('A fenced write requires a deadline')
+      deadline = await lockWriteFence(trx, storeId, mutations.fence, deadline)
+    }
+    assertWriteDeadline(deadline)
     for (const t of mutations.writes) {
       const obj = parseObject(t.object)
       const condition = (t as TupleKey).condition
@@ -204,6 +214,7 @@ async function applyTupleMutationsImpl(
           .execute()
       }
     }
+    assertWriteDeadline(deadline)
   })
 }
 

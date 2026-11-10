@@ -193,6 +193,12 @@ the configured namespace (`OPENFGA_DB_NAMESPACE`, default `openfga`)
 for operational simplicity. Operational data is not part of the upstream
 migration contract; see §Migration path FROM this server TO upstream OpenFGA.
 
+### Optional write fencing
+
+Lease-based single writers may acquire a monotonically increasing destination generation and attach it to tuple writes. A successor starts processing only after its acquisition commits. The server validates and holds the fence in the same transaction as tuple and change-log mutations, so an older generation cannot mutate state after its successor takes over. Operational fence state respects database namespacing on both supported backends.
+
+Optional not-after timestamps reject late admission and support cooperative cancellation. They do not guarantee an absolute commit-time cutoff. Existing OpenFGA requests without fence headers remain unchanged. The protocol and clock assumptions are specified in [Durable write fences](features/write-fences.md).
+
 ### OpenTelemetry observability
 
 The server supports OpenTelemetry tracing at the HTTP middleware

@@ -23,6 +23,7 @@ import * as tupleChanges from '../../migrations/1777910400000_tuple-changes'
 import * as assertions from '../../migrations/1777996800000_assertions'
 import * as tupleChangeSeq from '../../migrations/1778083200000_tuple-change-seq'
 
+import * as writeFences from '../../migrations/write-fences'
 import * as tupleConditions from '../../migrations/1793012400000_tuple-conditions'
 
 export const MIGRATIONS: Record<string, Migration> = {
@@ -32,6 +33,7 @@ export const MIGRATIONS: Record<string, Migration> = {
   '1777996800000_assertions': assertions,
   '1778083200000_tuple-change-seq': tupleChangeSeq,
   '1793012400000_tuple-conditions': tupleConditions,
+  '1793012400001_write-fences': writeFences,
 }
 
 export class StaticMigrationProvider implements MigrationProvider {

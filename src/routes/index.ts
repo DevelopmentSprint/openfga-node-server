@@ -1,3 +1,4 @@
+import { getDb } from '../storage/db'
 /**
  * HTTP routes — wire-compatible with the OpenFGA reference server's
  * REST API for the surface this project implements.
@@ -47,11 +48,15 @@ import { evaluationRoutes } from './evaluation'
 import { healthRoutes } from './health'
 import { modelsRoutes } from './models'
 import { storesRoutes } from './stores'
+import { lockWriteFence, WriteFenceError } from '../storage/write-fences'
+import { parseWriteContext, WriteFenceInputError, writeFenceRoutes } from './write-fences'
 import { tuplesRoutes } from './tuples'
 
 export function buildApp(): Hono {
   const app = new Hono()
   app.onError((error, c) => {
+    if (error instanceof WriteFenceInputError) return c.json({ code: 'invalid_argument', message: error.message }, 400)
+    if (error instanceof WriteFenceError) return c.json({ code: error.code, message: error.message }, 409)
     if (error instanceof ConditionError) return c.json({ code: error.code, message: error.message }, 400)
     logger.error({ err: error }, 'request_failed')
     return c.json({ code: 'internal_error', message: 'Internal Server Error' }, 500)
@@ -83,6 +88,18 @@ export function buildApp(): Hono {
   // idempotency-key entries for non-existent stores). See openfga-rv0.
   app.use('/stores/:storeId/*', requireStore())
 
+  // Cached responses must not bypass deadline admission or stale-fence checks.
+  // The actual mutation still validates and holds its fence in its own transaction.
+  app.use('/stores/:storeId/write', async (c, next) => {
+    if (c.req.method === 'POST') {
+      const context = parseWriteContext(c.req.raw.headers)
+      if (config.idempotency.mode !== 'off' && c.req.header('Idempotency-Key') && context.fence && context.deadline) {
+        await getDb().transaction().execute(trx => lockWriteFence(trx, c.req.param('storeId')!, context.fence!, context.deadline!))
+      }
+    }
+    await next()
+  })
+
   // Idempotency-Key support for the three mutating endpoints in scope
   // (PRD §"Idempotency keys", docs/features/idemnpotency-keys.md).
   // Mode and TTL are read from config.idempotency. Default mode is
@@ -107,6 +124,7 @@ export function buildApp(): Hono {
   app.route('/', modelsRoutes)
   app.route('/', evaluationRoutes)
   app.route('/', tuplesRoutes)
+  app.route('/', writeFenceRoutes)
   app.route('/', assertionsRoutes)
 
   return app

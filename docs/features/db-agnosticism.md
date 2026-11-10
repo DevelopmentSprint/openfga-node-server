@@ -86,7 +86,7 @@ The same value is interpreted per-engine:
 The namespace covers **every table this server owns**, with no exceptions:
 
 - The three OpenFGA-contract tables: `store`, `authorization_model`, `tuple`.
-- The three operational tables: `idempotency_keys`, `tuple_change`, `assertions`.
+- The operational tables: `idempotency_keys`, `tuple_change`, `assertions` and `write_fence`.
 - The Kysely `Migrator` tracking tables: `kysely_migration` and `kysely_migration_lock` (the Migrator is configured with the namespace at construction time so the tables it creates respect the operator's setting).
 
 Rationale: operators dropping this server into an existing Postgres instance need the freedom to pick a non-default schema (`openfga` may collide with an existing schema, or they may want everything under `app_authz`); SQLite operators sharing a database file need the same freedom for the prefix. Backup and conversion tools must honor the configured namespace.

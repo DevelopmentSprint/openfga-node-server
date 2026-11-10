@@ -1,3 +1,4 @@
+import { parseWriteContext } from './write-fences'
 /**
  * Tuple routes — the storage-mutating and storage-reading surface:
  *
@@ -36,6 +37,7 @@ export const tuplesRoutes = new Hono()
 tuplesRoutes.post('/stores/:storeId/write', validate('json', WriteBody), async (c) => {
   const storeId = c.req.param('storeId')
   const body = c.req.valid('json')
+  const { deadline, fence } = parseWriteContext(c.req.raw.headers)
   const writes = body.writes?.tuple_keys ?? []
   const deletes = body.deletes?.tuple_keys ?? []
 
@@ -58,6 +60,8 @@ tuplesRoutes.post('/stores/:storeId/write', validate('json', WriteBody), async (
 
   try {
     await applyTupleMutations(storeId, {
+      deadline,
+      fence,
       writes,
       deletes,
       onDuplicate: onDuplicate as TupleConflictMode,

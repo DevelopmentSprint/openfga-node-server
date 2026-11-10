@@ -6,9 +6,8 @@
  *   pnpm migrate down    # roll back the most recent migration
  *
  * The migration file source lives under `migrations/*.ts`. The runner
- * uses Kysely's `Migrator` + `FileMigrationProvider` to discover and
- * apply them in lexicographic-by-filename order (the timestamps in
- * the filenames sort correctly as text).
+ * uses Kysely's `Migrator` and the static migration bundle, whose
+ * stable keys define the application order independently of filenames.
  *
  * Tracking tables — Kysely's Migrator stores applied-migration state
  * in `kysely_migration` and a per-process advisory lock in

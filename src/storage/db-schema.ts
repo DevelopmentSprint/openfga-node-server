@@ -99,5 +99,6 @@ export interface Database {
   tuple: TupleTable
   tuple_change: TupleChangeTable
   idempotency_keys: IdempotencyKeyTable
+  write_fence: { store_id: string, key: string, generation: string, not_after: string }
   assertions: AssertionsTable
 }
