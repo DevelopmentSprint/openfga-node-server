@@ -112,19 +112,19 @@ describeIfDb('POST /stores/:storeId/read continuation_token round-trip', () => {
     expect(json.continuation_token).toBe('')
   })
 
-  it('returns 400 invalid_argument for a malformed continuation_token', async () => {
+  it('returns 400 invalid_continuation_token for a malformed continuation_token', async () => {
     const { app, storeId } = await setup()
     const res = await app.fetch(read(storeId, { continuation_token: 'not-a-real-token' }))
     expect(res.status).toBe(400)
     const body = await res.json() as { code: string }
-    expect(body.code).toBe('invalid_argument')
+    expect(body.code).toBe('invalid_continuation_token')
   })
 
   // Regression for openfga-5uv review: a structurally valid base64url
   // JSON cursor with a non-parseable timestamp must NOT reach
   // Postgres (which would surface 22007 invalid_datetime_format as a
   // 500). The decoder validates inserted_at is a real ISO timestamp.
-  it('returns 400 invalid_argument for a continuation_token with an unparseable timestamp', async () => {
+  it('returns 400 invalid_continuation_token for a continuation_token with an unparseable timestamp', async () => {
     const { app, storeId } = await setup()
     const evilToken = Buffer.from(
       JSON.stringify({
@@ -139,14 +139,14 @@ describeIfDb('POST /stores/:storeId/read continuation_token round-trip', () => {
     const res = await app.fetch(read(storeId, { continuation_token: evilToken }))
     expect(res.status).toBe(400)
     const body = await res.json() as { code: string }
-    expect(body.code).toBe('invalid_argument')
+    expect(body.code).toBe('invalid_continuation_token')
   })
 
   // Regression for openfga-5uv review: page_size: 0 used to pass the
   // schema's .nonnegative() check and crash the slice logic with a
   // 500. The schema is now .positive() so page_size: 0 is rejected
   // at the validation boundary even when rows exist.
-  it('returns 400 invalid_argument for page_size: 0 even when tuples exist', async () => {
+  it('returns 400 validation_error for page_size: 0 even when tuples exist', async () => {
     const { app, storeId } = await setup()
     await writeTuples(storeId, [
       { user: 'user:alice', relation: 'viewer', object: 'doc:1' },
@@ -154,7 +154,7 @@ describeIfDb('POST /stores/:storeId/read continuation_token round-trip', () => {
     const res = await app.fetch(read(storeId, { page_size: 0 }))
     expect(res.status).toBe(400)
     const body = await res.json() as { code: string }
-    expect(body.code).toBe('invalid_argument')
+    expect(body.code).toBe('validation_error')
   })
 
   it('respects filter narrowing alongside pagination', async () => {

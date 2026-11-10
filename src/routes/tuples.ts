@@ -22,6 +22,7 @@ import {
 } from '../storage/tuples'
 import { loadModelIndex } from '../storage/engine-context'
 import { validate } from '../middleware/validation'
+import { modelNotFound, INVALID_CONTINUATION_TOKEN } from './_helpers/model-errors'
 import { ChangesQuery, ReadBody, WriteBody } from './schemas'
 import { validateWriteTupleKey } from './write-validation'
 import {
@@ -57,13 +58,13 @@ tuplesRoutes.post('/stores/:storeId/write', validate('json', WriteBody), async (
     ? await loadModelIndex(storeId, body.authorization_model_id)
     : null
   if ((writes.length > 0 || body.authorization_model_id) && !ctx) {
-    return c.json({ code: 'not_found', message: 'authorization model not found' }, 404)
+    return modelNotFound(c, storeId, body.authorization_model_id)
   }
 
   if (ctx) {
     for (const tuple of writes) {
       const invalid = validateWriteTupleKey(ctx.index, tuple)
-      if (invalid) return c.json({ code: 'invalid_argument', message: invalid }, 400)
+      if (invalid) return c.json({ code: 'validation_error', message: invalid }, 400)
     }
   }
 
@@ -100,7 +101,7 @@ tuplesRoutes.post('/stores/:storeId/read', validate('json', ReadBody), async (c)
   if (body.continuation_token !== undefined && body.continuation_token.length > 0) {
     cursor = decodeReadCursor(body.continuation_token)
     if (cursor === null) {
-      return c.json({ code: 'invalid_argument', message: 'continuation_token is malformed' }, 400)
+      return c.json(INVALID_CONTINUATION_TOKEN, 400)
     }
   }
   let page
@@ -153,13 +154,13 @@ tuplesRoutes.get('/stores/:storeId/changes', validate('query', ChangesQuery), as
   if (suppliedToken !== null) {
     cursor = decodeChangeCursor(suppliedToken)
     if (cursor === null) {
-      return c.json({ code: 'invalid_argument', message: 'continuation_token is malformed' }, 400)
+      return c.json(INVALID_CONTINUATION_TOKEN, 400)
     }
     // Cross-filter token reuse is rejected: a token issued under one
     // type filter is not valid under a different filter.
     if (cursor.type !== requestType) {
       return c.json({
-        code: 'invalid_argument',
+        code: 'query_string_type_continuation_token_mismatch',
         message: cursor.type === null
           ? 'continuation_token was issued without a type filter; do not pass `type` on the continuation call'
           : `continuation_token was issued with type=${cursor.type}; the same type filter must be supplied`,

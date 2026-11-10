@@ -4,8 +4,8 @@
  * This file is the entrypoint for `pnpm dev` / `pnpm start` and any
  * bare-metal, container, or VM deployment. It binds TCP sockets via
  * `@hono/node-server`'s `serve()`, so it must NOT be imported by any
- * runtime that supplies its own request transport (e.g. Vercel
- * Functions). The Hono app itself lives in `./index.ts`, which is what
+ * runtime that supplies its own request transport (e.g. a
+ * serverless function host). The Hono app itself lives in `./index.ts`, which is what
  * such platforms import.
  *
  * Reads the resolved `config` (see `src/config.ts` and

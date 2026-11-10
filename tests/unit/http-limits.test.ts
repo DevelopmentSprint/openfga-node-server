@@ -108,7 +108,7 @@ describe('POST /stores/:storeId/read page_size cap', () => {
   it('rejects page_size above 100', async () => {
     const res = await app.fetch(postJson('/stores/abc/read', { page_size: 101 }))
     expect(res.status).toBe(400)
-    expect((await envelope(res)).code).toBe('invalid_argument')
+    expect((await envelope(res)).code).toBe('validation_error')
   })
 
   it('rejects absurd page_size', async () => {
@@ -121,15 +121,15 @@ describe('POST /stores name length', () => {
   it('rejects a name longer than 64 characters', async () => {
     const res = await app.fetch(postJson('/stores', { name: 'n'.repeat(65) }))
     expect(res.status).toBe(400)
-    expect((await envelope(res)).code).toBe('invalid_argument')
+    expect((await envelope(res)).code).toBe('validation_error')
   })
 })
 
 describe('GET /stores/:storeId/authorization-models/:id', () => {
-  it('rejects a malformed model id with 400 invalid_argument', async () => {
+  it('rejects a malformed model id with 400 validation_error', async () => {
     const res = await app.fetch(new Request('http://localhost/stores/abc/authorization-models/not-a-ulid'))
     expect(res.status).toBe(400)
-    expect((await envelope(res)).code).toBe('invalid_argument')
+    expect((await envelope(res)).code).toBe('validation_error')
   })
 })
 
