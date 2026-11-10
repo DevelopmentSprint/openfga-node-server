@@ -251,3 +251,11 @@ it('configures the BatchCheck limit through file and upstream environment names'
   expect(ConfigSchema.parse(applyEnvOverrides({ maxChecksPerBatchCheck: 100 }, { OPENFGA_MAX_CHECKS_PER_BATCH_CHECK: '2' })).maxChecksPerBatchCheck).toBe(2)
   expect(ConfigSchema.parse(applyEnvOverrides({}, { OPENFGA_MAX_CHECKS_PER_BATCH_CHECK: '' })).maxChecksPerBatchCheck).toBe(50)
 })
+
+it('configures the optional write-fence extension (default off, strict boolean)', () => {
+  expect(ConfigSchema.parse(applyEnvOverrides({}, {})).writeFences.enabled).toBe(false)
+  expect(ConfigSchema.parse(applyEnvOverrides({}, { OPENFGA_WRITE_FENCES_ENABLED: ' TRUE ' })).writeFences.enabled).toBe(true)
+  expect(ConfigSchema.parse(applyEnvOverrides({ writeFences: { enabled: true } }, { OPENFGA_WRITE_FENCES_ENABLED: 'false' })).writeFences.enabled).toBe(false)
+  expect(ConfigSchema.parse(applyEnvOverrides({ writeFences: { enabled: true } }, { OPENFGA_WRITE_FENCES_ENABLED: '' })).writeFences.enabled).toBe(true)
+  expect(ConfigSchema.safeParse(applyEnvOverrides({}, { OPENFGA_WRITE_FENCES_ENABLED: 'yes' })).success).toBe(false)
+})

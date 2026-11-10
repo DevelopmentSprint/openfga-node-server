@@ -161,6 +161,13 @@ const result = await fga.batchCheck({
 // result.responses: per-check outcome with correlationId
 ```
 
+Each `correlationId` must be unique within the request and 1 to 36
+characters of ASCII letters, digits, underscore or hyphen. A request
+with more checks than `maxChecksPerBatchCheck` (default 50; env
+`OPENFGA_MAX_CHECKS_PER_BATCH_CHECK`) or with a repeated id is rejected
+with `400 validation_error`. If one check fails, that item carries its
+own error and the other results are returned normally.
+
 ## Idempotency-Key on writes
 
 If you've enabled

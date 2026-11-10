@@ -127,6 +127,7 @@ Constraints encoded in the Zod schema:
 - `listeners.http.port` and `listeners.https.port` must each be an integer from 1 through 65535; port 0 is rejected.
 - `db.pool.min` must be less than or equal to `db.pool.max`.
 - `log.level` is one of `trace|debug|info|warn|error|fatal|silent`.
+- `maxChecksPerBatchCheck` must be a positive integer no larger than 4294967295 (uint32); the default is 50. It caps the number of `checks` accepted by one `POST /stores/:storeId/batch-check` request.
 
 Cross-field constraints are enforced via Zod `superRefine` on the root schema so they fire alongside individual field validation in a single error tree.
 
@@ -155,11 +156,13 @@ Each existing `OPENFGA_*` env var maps to a nested config path. After c12 loads 
 | `OPENFGA_AUTH_PRESHARED_KEYS` | `auth.presharedKeys` | comma-string → string[] (drops empty entries) |
 | `OPENFGA_IDEMPOTENCY_MODE` | `idempotency.mode` | enum `off\|optional\|required` |
 | `OPENFGA_IDEMPOTENCY_TTL_MS` | `idempotency.ttlMs` | **positive** int (matches current parser at `src/middleware/idempotency.ts:82-87`; `0` and negatives are fatal) |
+| `OPENFGA_WRITE_FENCES_ENABLED` | `writeFences.enabled` | strict-bool (default `false`); optional write-fence extension, see `docs/features/write-fences.md` |
 | `OPENFGA_AUTH_OIDC_JWKS_CACHE_MAX_AGE_MS` | `auth.oidc.jwksCacheMaxAgeMs` | non-negative int (default 600000); see `docs/features/oidc-auth.md` |
 | `OPENFGA_AUTH_OIDC_JWKS_COOLDOWN_MS` | `auth.oidc.jwksCooldownMs` | non-negative int (default 30000); see `docs/features/oidc-auth.md` |
 | `OPENFGA_OTEL_EXPORTER_HEADERS` | `otel.exporter.headers` | OTel key=value list (below) |
 | `OPENFGA_OTEL_RESOURCE_ATTRIBUTES` | `otel.resource.attributes` | OTel key=value list (below) |
 | `OPENFGA_LOG_LEVEL` | `log.level` | enum |
+| `OPENFGA_MAX_CHECKS_PER_BATCH_CHECK` | `maxChecksPerBatchCheck` | **positive** int, at most 4294967295 (uint32); default 50; see `docs/features/request-validation.md` |
 | `OPENFGA_API_URL` | `loadModel.apiUrl` | string |
 | `OPENFGA_STORE_NAME` | `loadModel.storeName` | string |
 | `OPENFGA_STORE_ID` | `loadModel.storeId` | string |

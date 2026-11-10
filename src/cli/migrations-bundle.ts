@@ -27,6 +27,7 @@ import * as tupleConditions from '../../migrations/1793012400000_tuple-condition
 import * as readAndModelIndexes from '../../migrations/1794300100000_read-and-model-indexes'
 import * as idempotencyClaimToken from '../../migrations/1794400000000_idempotency-claim-token'
 import * as authorizationModelSeq from '../../migrations/1794400100000_authorization-model-seq'
+import * as writeFences from '../../migrations/1794500000000_write-fences'
 
 export const MIGRATIONS: Record<string, Migration> = {
   '1777680000000_initial-openfga-schema': initialSchema,
@@ -38,6 +39,7 @@ export const MIGRATIONS: Record<string, Migration> = {
   '1794300100000_read-and-model-indexes': readAndModelIndexes,
   '1794400000000_idempotency-claim-token': idempotencyClaimToken,
   '1794400100000_authorization-model-seq': authorizationModelSeq,
+  '1794500000000_write-fences': writeFences,
 }
 
 export class StaticMigrationProvider implements MigrationProvider {

@@ -86,7 +86,7 @@ The same value is interpreted per-engine:
 The namespace covers **every table this server owns**, with no exceptions:
 
 - The three OpenFGA-contract tables: `store`, `authorization_model`, `tuple`.
-- The three operational tables: `idempotency_keys`, `tuple_change`, `assertions`.
+- The operational tables: `idempotency_keys`, `tuple_change`, `assertions` and `write_fence`.
 - The Kysely `Migrator` tracking tables: `kysely_migration` and `kysely_migration_lock` (the Migrator is configured with the namespace at construction time so the tables it creates respect the operator's setting).
 
 Rationale: operators dropping this server into an existing Postgres instance need the freedom to pick a non-default schema (`openfga` may collide with an existing schema, or they may want everything under `app_authz`); SQLite operators sharing a database file need the same freedom for the prefix. Backup and conversion tools must honor the configured namespace.
@@ -177,6 +177,7 @@ Migrations added since the initial schema, all forward-only and namespace-aware:
 - `1794300100000_read-and-model-indexes.ts`: an index matching the paginated `/read` order on `tuple`, and a `(store_id, id desc)` index on `authorization_model`.
 - `1794400000000_idempotency-claim-token.ts`: a nullable `claim_token text` column on `idempotency_keys`, so the in-flight claim token no longer shares `response_status` with the HTTP status.
 - `1794400100000_authorization-model-seq.ts`: the `seq` column, its Postgres sequence or SQLite trigger, and a `(store_id, seq desc)` index serving the latest-model lookup and newest-first listing.
+- `1794500000000_write-fences.ts`: the operational `write_fence` table for the optional write-fence extension (`docs/features/write-fences.md`), keyed by `(store_id, key)`, with a foreign key to the physical store table (`ON DELETE CASCADE`). Created whether or not the extension is enabled; no secondary index. Its `down()` drops only this table.
 
 SQLite index names share one global namespace per database file, so migrations from `1794300100000` onward prefix SQLite index names with the namespace. Postgres indexes live in the namespace schema and need no prefix.
 

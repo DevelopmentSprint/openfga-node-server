@@ -117,6 +117,13 @@ idempotency:
   # Default: 86400000 (24h).
   ttlMs: 86400000
 
+writeFences:
+  # Optional durable write-fence extension (docs/features/write-fences.md).
+  # false (default): API surface identical to upstream OpenFGA; the
+  # /x-ext/ acquisition route is not mounted and fence headers on
+  # /write are ignored.
+  enabled: false
+
 loadModel:
   # Settings for `pnpm load-model`. Not used by the server runtime.
   apiUrl: http://localhost:8080

@@ -183,6 +183,9 @@ export function applyEnvOverrides(raw: unknown, env: EnvLike = process.env): unk
   set(['idempotency', 'mode'], 'OPENFGA_IDEMPOTENCY_MODE')
   set(['idempotency', 'ttlMs'], 'OPENFGA_IDEMPOTENCY_TTL_MS')
 
+  // ─── writeFences ────────────────────────────────────────────────
+  set(['writeFences', 'enabled'], 'OPENFGA_WRITE_FENCES_ENABLED')
+
   // ─── loadModel ──────────────────────────────────────────────────
   set(['loadModel', 'apiUrl'], 'OPENFGA_API_URL')
   set(['loadModel', 'storeName'], 'OPENFGA_STORE_NAME')

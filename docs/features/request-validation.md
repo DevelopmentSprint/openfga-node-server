@@ -102,6 +102,11 @@ These are code constants that mirror upstream defaults, not configuration:
 - `POST /stores/:storeId/read` `page_size` must be 1 through 100.
 - Store `name` is trimmed and must be 1 through 64 characters.
 - Authorization model IDs (`:id`, `authorization_model_id`) must be ULIDs; request bodies may leave `authorization_model_id` empty.
+- `POST /stores/:storeId/batch-check` is validated in this order, and the first failure is returned:
+  1. Schema: `checks` must contain at least one item, and each item's `correlation_id` must be 1 through 36 characters of ASCII letters, digits, underscore or hyphen.
+  2. Check limit: the number of `checks` must not exceed `maxChecksPerBatchCheck` (env `OPENFGA_MAX_CHECKS_PER_BATCH_CHECK`, default 50, a positive integer within uint32). Exceeding it returns `400 validation_error` with message `batchCheck received N checks, the maximum allowed is M`.
+  3. Duplicate ids: each `correlation_id` must be unique within the request. A repeat returns `400 validation_error` with message `received duplicate correlation id: X`.
+- Once a batch-check request passes those checks, items are evaluated independently and results are keyed by `correlation_id`. An item that fails evaluation returns its own per-item `error` object in `result`, and the results of the other items are kept; the request does not fail as a whole.
 - Any unmatched route under `/stores` returns `404` with a JSON envelope, code `undefined_endpoint`, instead of a plain-text 404.
 
 ## Error Semantics
