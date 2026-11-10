@@ -16,6 +16,7 @@ import { InMemoryTupleStore, unionTupleStore } from '../../src/evaluator/tuple-s
 import { ModelIndex } from '../../src/evaluator/model-index'
 import { check } from '../../src/evaluator/check'
 import { listObjects } from '../../src/evaluator/list-objects'
+import { withContextualTuples } from '../../src/routes/_helpers/contextual-tuples'
 
 function modelIndex(model: AuthorizationModel): ModelIndex {
   return new ModelIndex(model.type_definitions ?? [])
@@ -219,5 +220,36 @@ describe('list-objects with contextual tuples', () => {
       'doc',
     )
     expect(ids).toEqual(['1'])
+  })
+})
+
+describe('duplicate contextual tuples (openfga-k2a.15)', () => {
+  const condModel = new ModelIndex([
+    { type: 'user' },
+    {
+      type: 'doc',
+      relations: { viewer: { this: {} } },
+      metadata: { relations: { viewer: { directly_related_user_types: [{ type: 'user', condition: 'gate' }] } } },
+    },
+  ], {
+    gate: { name: 'gate', expression: 'allowed == true', parameters: { allowed: { type_name: 'TYPE_NAME_BOOL' as never } } },
+  })
+  const allow = { name: 'gate', context: { allowed: true } }
+  const deny = { name: 'gate', context: { allowed: false } }
+
+  it('keeps the FIRST duplicate when conditions differ (allow first)', async () => {
+    const store = withContextualTuples(new InMemoryTupleStore(), [
+      { user: 'user:alice', relation: 'viewer', object: 'doc:1', condition: allow },
+      { user: 'user:alice', relation: 'viewer', object: 'doc:1', condition: deny },
+    ])
+    expect(await check(condModel, store, 'user:alice', 'viewer', 'doc:1')).toBe(true)
+  })
+
+  it('keeps the FIRST duplicate when conditions differ (deny first)', async () => {
+    const store = withContextualTuples(new InMemoryTupleStore(), [
+      { user: 'user:alice', relation: 'viewer', object: 'doc:1', condition: deny },
+      { user: 'user:alice', relation: 'viewer', object: 'doc:1', condition: allow },
+    ])
+    expect(await check(condModel, store, 'user:alice', 'viewer', 'doc:1')).toBe(false)
   })
 })

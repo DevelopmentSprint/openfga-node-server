@@ -19,7 +19,7 @@ The server should support client-provided idempotency keys for mutating requests
 ## Goals
 
 - Support the `Idempotency-Key` header for configured mutating endpoints.
-- Preserve existing OpenFGA response bodies for successful first requests and replayed successful requests.
+- Preserve existing OpenFGA response bodies for successful first requests and replayed successful requests. Only 2xx responses are persisted and replayed.
 - Use persistent idempotency storage so retry protection survives process restarts and horizontal scaling.
 - Persist idempotency state in the `openfga` schema with a documented `pg_dump --exclude-table` recipe so the migration path to upstream OpenFGA is preserved operationally rather than by schema isolation.
 - Make rollout configurable so existing clients are not broken by default.
@@ -65,6 +65,16 @@ Additional configuration:
 
 Authentication must run before idempotency. Unauthorized requests must not create, replay, or inspect idempotency records.
 
+## Caller Scoping
+
+Keys are scoped to the authenticated caller (principal). The stored key is a SHA-256 of the JSON-encoded pair `[principal, Idempotency-Key]`, so the raw client key is never persisted and two callers that choose the same `Idempotency-Key` never replay, conflict with, or probe each other's records. The principal is set by the auth middleware:
+
+- Preshared-key mode: a SHA-256 digest of the matched key (stable across configuration reordering; the key itself is never stored).
+- OIDC mode: the token's `sub` and client (`client_id`, falling back to `azp`).
+- Auth mode `none`: a single constant anonymous principal.
+
+The `Idempotency-Key` header is trimmed and must be at most 255 characters; a longer key is rejected with `400` before any record is created.
+
 Request logging should continue to record method, path, status, and duration. It must not log idempotency keys.
 
 Idempotency middleware should run before route handlers for scoped mutating endpoints. Route handlers should not need to know whether a response is original or replayed unless the selected middleware exposes response headers that are safe and useful to clients.
@@ -74,6 +84,8 @@ Idempotency middleware should run before route handlers for scoped mutating endp
 Idempotency requires persistent storage. In-memory storage is not acceptable for production because it does not survive process restarts and cannot coordinate horizontally scaled instances.
 
 The v1 backing store is the same Postgres database the OpenFGA tables live in. The idempotency table is created in the `openfga` schema as `openfga.idempotency_keys`. The migration that creates it lives in `migrations/` alongside the OpenFGA migration so a single `pnpm migrate up` brings the database to a working state.
+
+The in-flight claim token is stored in its own nullable `claim_token` column of `idempotency_keys`; `response_status` holds only a real HTTP status.
 
 The `openfga` schema must remain a faithful subset of the upstream OpenFGA reference schema so `pg_dump --schema=openfga` produces a valid migration source. The idempotency table is not part of the OpenFGA-compatible state contract. To preserve the migration path, operators run `pg_dump --schema=openfga --exclude-table='openfga.idempotency_keys'` when cutting over to upstream OpenFGA. The PRD documents this recipe in §"Migration path FROM this server TO upstream OpenFGA" or in §"Idempotency keys".
 
@@ -87,7 +99,7 @@ The request fingerprint must include at least:
 - Route path.
 - Request body.
 
-The fingerprint may exclude non-semantic fields only when there is a documented use case. The initial implementation should not exclude fields by default.
+The method and the concrete request path (not the route pattern) are hashed, so the same key reused against two stores does not replay across stores. The fingerprint may exclude non-semantic fields only when there is a documented use case. The initial implementation should not exclude fields by default.
 
 ## Expected Behavior
 
@@ -98,8 +110,11 @@ When idempotency is off:
 When idempotency is optional:
 
 - Requests without `Idempotency-Key` behave as they do today.
-- Requests with a new key process normally and persist the response.
+- Requests with a new key process normally and persist the response if it is 2xx.
 - Requests with the same key and same fingerprint return the persisted response.
+- A response that is not 2xx (4xx or 5xx), or a handler that throws, releases the key: nothing is persisted, and a retry with the same key re-runs the request instead of replaying a cached failure.
+- An empty original body (for example `204`) is stored as empty and replays as an empty body with the original status.
+- A key that stays in flight for longer than the 5-minute in-flight lease (its owner crashed or hung) becomes reclaimable by a later request. Completing or releasing a claim only affects the row the claiming request owns, so a request whose lease expired cannot overwrite the new owner's record.
 - Requests with the same key and a different fingerprint return a client error.
 - Concurrent requests with the same key return a conflict while the first request is still processing.
 
@@ -134,6 +149,9 @@ Logs must avoid raw `Idempotency-Key` values. If correlation is needed, log a st
 - The PRD includes idempotency-key support in current scope.
 - A configured mutating endpoint can replay the original response for the same `Idempotency-Key` and same request fingerprint.
 - Reusing a key with a different request fingerprint returns `422`.
+- Non-2xx responses and thrown handlers are not persisted; a retry re-runs the request.
+- A key used by one authenticated caller is invisible to another caller.
+- An `Idempotency-Key` longer than 255 characters returns `400`.
 - Concurrent requests with the same key return `409` for the later request while the first is still processing.
 - Required mode rejects scoped mutating requests that omit `Idempotency-Key`.
 - Optional mode permits requests without `Idempotency-Key`.

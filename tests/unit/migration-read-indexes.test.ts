@@ -59,11 +59,13 @@ describe('read-and-model-indexes migration (SQLite)', () => {
   it('down() drops only the two new indexes and up() can be re-applied', async () => {
     await migrateToLatest()
     const before = (await indexes('openfga_tuple')).map(i => i.name).sort()
-    const beforeModel = (await indexes('openfga_authorization_model')).map(i => i.name).sort()
+    const beforeModel = (await indexes('openfga_authorization_model')).map(i => i.name).filter(n => !n.includes('seq')).sort()
     const migrator = buildMigrator()
-    const down = await migrator.migrateDown()
+    // Roll back to the migration before this one (later migrations,
+    // e.g. claim-token and model-seq, are undone too).
+    const down = await migrator.migrateTo('1793012400000_tuple-conditions')
     expect(down.error).toBeUndefined()
-    expect(down.results?.[0]?.migrationName).toBe('1794300100000_read-and-model-indexes')
+    expect(down.results?.map(r => r.migrationName)).toContain('1794300100000_read-and-model-indexes')
     const after = (await indexes('openfga_tuple')).map(i => i.name).sort()
     const afterModel = (await indexes('openfga_authorization_model')).map(i => i.name).sort()
     expect(before.filter(n => !after.includes(n))).toEqual(['openfga_idx_tuple_store_read_order'])
@@ -71,6 +73,41 @@ describe('read-and-model-indexes migration (SQLite)', () => {
     expect(after.length).toBe(before.length - 1)
     const up = await migrator.migrateToLatest()
     expect(up.error).toBeUndefined()
+  })
+})
+
+describe('authorization-model-seq migration (SQLite, openfga-k2a.16)', () => {
+  it('backfills existing rows in id order, assigns seq on insert, namespaces the index, and down() is safe', async () => {
+    process.env['OPENFGA_DB_NAMESPACE'] = 'app_authz'
+    await reloadConfigForTests()
+    await resetDb()
+    const migrator = buildMigrator()
+    // Migrate to just before the seq migration, then seed pre-existing rows.
+    const before = await migrator.migrateTo('1794300100000_read-and-model-indexes')
+    expect(before.error).toBeUndefined()
+    const db = getDb()
+    await sql`insert into app_authz_store (id, name) values ('s1', 's')`.execute(db)
+    for (const id of ['B', 'A', 'C']) {
+      await sql`insert into app_authz_authorization_model (id, store_id, schema_version, model)
+        values (${id}, 's1', '1.1', '{}')`.execute(db)
+    }
+    const up = await migrator.migrateToLatest()
+    expect(up.error).toBeUndefined()
+    const rows = await sql<{ id: string, seq: number }>`select id, seq from app_authz_authorization_model order by seq`.execute(db)
+    expect(rows.rows).toEqual([{ id: 'A', seq: 1 }, { id: 'B', seq: 2 }, { id: 'C', seq: 3 }])
+    await sql`insert into app_authz_authorization_model (id, store_id, schema_version, model)
+      values ('0', 's1', '1.1', '{}')`.execute(db)
+    const latest = await sql<{ id: string }>`select id from app_authz_authorization_model order by seq desc limit 1`.execute(db)
+    expect(latest.rows[0]?.id).toBe('0')
+    const idx = await indexes('app_authz_authorization_model')
+    expect(idx.find(i => i.name === 'app_authz_idx_authorization_model_store_seq_desc')?.cols)
+      .toEqual(['store_id', 'seq'])
+    const down = await migrator.migrateDown()
+    expect(down.error).toBeUndefined()
+    expect(down.results?.[0]?.migrationName).toBe('1794400100000_authorization-model-seq')
+    const cols = await sql<{ name: string }>`select name from pragma_table_info('app_authz_authorization_model')`.execute(db)
+    expect(cols.rows.map(c => c.name)).not.toContain('seq')
+    expect((await migrator.migrateToLatest()).error).toBeUndefined()
   })
 })
 

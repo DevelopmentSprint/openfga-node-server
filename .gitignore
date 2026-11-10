@@ -32,3 +32,11 @@ openfga.config.cjs
 
 # Explicitly requested local Beads backups contain private work notes.
 /.beads-export-backup-*/
+
+# Local agent tooling (never committed)
+.mcp.json
+.openrig/
+.agents/
+.claude/plugins/
+.claude/skills/
+.beads.gate.lock

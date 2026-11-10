@@ -21,6 +21,8 @@ import {
 import {
   getAuthorizationModel,
   getLatestAuthorizationModel,
+  getLatestAuthorizationModelId,
+  listAuthorizationModelsPage,
   listAuthorizationModels,
   writeAuthorizationModel,
 } from '../../src/storage/authorization-models'
@@ -193,5 +195,30 @@ describe('authorization_model (Kysely port)', () => {
     const page = await listAuthorizationModels(storeId, 2)
     // DESC by created_at — last two written come first.
     expect(page.map(m => m.id)).toEqual([ids[3], ids[2]])
+  })
+
+  it('selects latest by write-order seq even when a later write has a lexically smaller id (openfga-k2a.16)', async () => {
+    const storeId = await makeStore()
+    const first = await writeAuthorizationModel(storeId, {
+      schema_version: '1.1',
+      type_definitions: [{ type: 'user' }],
+    })
+    // Simulate a replica with a lagging clock: written later, sorts earlier.
+    const skewedId = '00000000000000000000000001'
+    expect(skewedId < first.id).toBe(true)
+    await getDb().insertInto('authorization_model').values({
+      id: skewedId,
+      store_id: storeId,
+      schema_version: '1.1',
+      model: JSON.stringify({ schema_version: '1.1', type_definitions: [{ type: 'user' }, { type: 'doc' }] }),
+    }).execute()
+    expect((await getLatestAuthorizationModel(storeId))?.id).toBe(skewedId)
+    expect(await getLatestAuthorizationModelId(storeId)).toBe(skewedId)
+    expect((await listAuthorizationModels(storeId, 2)).map(m => m.id)).toEqual([skewedId, first.id])
+    const page1 = await listAuthorizationModelsPage(storeId, 1)
+    expect(page1.rows.map(m => m.id)).toEqual([skewedId])
+    const page2 = await listAuthorizationModelsPage(storeId, 1, page1.next!)
+    expect(page2.rows.map(m => m.id)).toEqual([first.id])
+    expect(page2.next).toBeNull()
   })
 })

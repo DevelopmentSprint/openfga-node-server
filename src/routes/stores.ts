@@ -7,6 +7,7 @@
 import { Hono } from 'hono'
 import { createStore, listStoresPage, getStore, deleteStore } from '../storage/stores'
 import { validate } from '../middleware/validation'
+import { INVALID_CONTINUATION_TOKEN } from './_helpers/model-errors'
 import { CreateStoreBody, ListStoresQuery } from './schemas'
 import { decodeStoreCursor, encodeStoreCursor, type StoreCursor } from './_helpers/cursors'
 
@@ -19,7 +20,7 @@ storesRoutes.get('/stores', validate('query', ListStoresQuery), async (c) => {
   if (continuation_token !== undefined && continuation_token.length > 0) {
     cursor = decodeStoreCursor(continuation_token)
     if (cursor === null) {
-      return c.json({ code: 'invalid_argument', message: 'continuation_token is malformed' }, 400)
+      return c.json(INVALID_CONTINUATION_TOKEN, 400)
     }
   }
   const page = await listStoresPage(pageSize, cursor)

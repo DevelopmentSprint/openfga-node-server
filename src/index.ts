@@ -1,7 +1,7 @@
 /**
- * Hono application instance — the entrypoint Vercel auto-detects
- * (https://vercel.com/docs/frameworks/backend/hono) and the source of
- * the `app` re-imported by `./server.ts` for self-hosting.
+ * Hono application instance — the entrypoint that serverless hosts and
+ * other request-transport runtimes import, and the source of the `app`
+ * re-imported by `./server.ts` for self-hosting.
  *
  * This file MUST stay free of socket binding, env reads with
  * `process.exit`, or any other side effect that assumes a

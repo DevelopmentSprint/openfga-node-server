@@ -14,7 +14,7 @@ The PRD does not address developer-tooling automation. This feature exists at th
 
 ## Business Intent
 
-Dependabot opens dependency-update PRs on a weekly cadence (npm, github-actions). Today every PR — including patch bumps and dev-dependency churn — requires a maintainer to review and click merge. The hand-driven sweep is recurring labor with low information value when CI is already gating regressions. The conservative classes of update (patch, dev-dep minor, security patch) carry near-zero risk at CI green and benefit from landing fast without ceremony. Riskier classes (any major, prod-dep minor, security minor/major) continue to need human eyes.
+Dependabot opens dependency-update PRs on a weekly cadence (npm, github-actions). Today every PR — including patch bumps and dev-dependency churn — requires a maintainer to review and click merge. The hand-driven sweep is recurring labor with low information value when CI is already gating regressions. The conservative classes of update (patch, dev-dep minor) carry near-zero risk at CI green and benefit from landing fast without ceremony. Riskier classes (any major, prod-dep minor) continue to need human eyes.
 
 This feature wires three independent layers — repo settings, branch protection, and a workflow — that together cause low-risk Dependabot PRs to merge on their own once CI passes, while leaving the rest of the merge surface unchanged.
 
@@ -30,7 +30,7 @@ This feature wires three independent layers — repo settings, branch protection
 
 - Do not auto-merge any major version bump.
 - Do not auto-merge any minor or major bump on a direct production dependency.
-- Do not auto-merge security minors or majors. The fix is already merged upstream; the change surface is wider than a security patch.
+- Do not gate on whether a PR is a security update. Detecting that needs `dependabot/fetch-metadata`'s `alert-lookup`, which requires a token with Dependabot-alerts read access that the project does not provision (owner decision, accepted gap). Eligibility depends only on `update-type` and `dependency-type`, so a security update of an eligible class auto-merges like any other, and a security update of an ineligible class (for example a major) stays manual because of its class.
 - Do not auto-merge into `main`. `main` continues to receive only approved PRs from `develop` (per `branches-worktrees.md` §1) or explicitly approved hotfixes.
 - Do not enforce branch protection on `main` as part of this feature. Promotion to `main` remains a separate gated activity.
 - Do not require pull-request reviews on `develop`. Auto-merge fires on CI green; trusted committers self-merge their own PRs.
@@ -79,9 +79,9 @@ One-time API change:
 - Concurrency group: `dep-automerge-${{ github.event.pull_request.number }}` with `cancel-in-progress: true`.
 - Steps:
   1. Belt-and-suspenders actor recheck (`if: github.actor == 'dependabot[bot]'`). Fails closed if somehow reached without Dependabot.
-  2. `dependabot/fetch-metadata@<sha-pin>` (40-char commit SHA, version in a comment for human readability). Outputs `update-type`, `dependency-type`, `package-ecosystem`, alert state.
+  2. `dependabot/fetch-metadata@<sha-pin>` (40-char commit SHA, version in a comment for human readability). Outputs `update-type`, `dependency-type`, `package-ecosystem`. `alert-lookup` is not enabled.
   3. Eligibility decision. Composite condition over the metadata outputs (matrix below).
-  4. On match: `gh pr merge --auto --merge "$PR_URL"`. On no-match: log a structured decision line (PR number, update-type, dependency-type, security flag, skip reason) and exit 0.
+  4. On match: `gh pr merge --auto --merge "$PR_URL"`. On no-match: log a structured decision line (PR number, update-type, dependency-type, skip reason) and exit 0.
 - No `actions/checkout` step. The workflow does not access PR-head code under any circumstance.
 - No use of `secrets.*`.
 
@@ -90,7 +90,7 @@ One-time API change:
 New file. Documents:
 
 - The eligibility matrix (verbatim from this spec).
-- Security update handling.
+- The decision not to special-case security updates.
 - The three-layer kill-switch hierarchy and recommended order.
 - The branch-protection contract (required checks list, what happens if a check is renamed).
 - The "restricted to Dependabot and trusted committers" boundary.
@@ -99,32 +99,26 @@ New file. Documents:
 
 ## Eligibility Matrix
 
-A Dependabot PR is auto-merged when **both** the eligibility check matches **and** the security override does not block.
+A Dependabot PR is auto-merged when the eligibility check matches.
 
 **Eligibility check (auto-merge candidate):**
 
 - `update-type` is `version-update:semver-patch` (any `dependency-type`, including `indirect`), OR
 - `update-type` is `version-update:semver-minor` AND `dependency-type` is `direct:development`.
 
-**Security override (blocks auto-merge):**
-
-- The PR is flagged as a security update AND `update-type` is NOT `version-update:semver-patch`.
-
-If the eligibility check passes and the security override does not block, auto-merge. Otherwise, log a structured skip line and exit.
+If the eligibility check passes, auto-merge. Otherwise, log a structured skip line and exit. There is no security-update override: see Non-Goals.
 
 **Truth table** (all relevant combinations):
 
-| `update-type` | `dependency-type` | Security flag | Outcome | Reason |
-|---|---|---|---|---|
-| patch | any | no | auto | eligibility: patch |
-| patch | any | yes | auto | eligibility: patch; override does not block (patch security) |
-| minor | `direct:development` | no | auto | eligibility: dev-dep minor |
-| minor | `direct:development` | yes | manual | override blocks: security minor |
-| minor | `direct:production` | any | manual | not eligible |
-| minor | `indirect` | any | manual | not eligible (indirect ≠ development) |
-| major | any | any | manual | not eligible: major |
+| `update-type` | `dependency-type` | Outcome | Reason |
+|---|---|---|---|
+| patch | any | auto | eligibility: patch |
+| minor | `direct:development` | auto | eligibility: dev-dep minor |
+| minor | `direct:production` | manual | not eligible |
+| minor | `indirect` | manual | not eligible (indirect ≠ development) |
+| major | any | manual | not eligible: major |
 
-Grouped updates (per `dependabot.yml`'s `groups` block) report the highest semver bump in the group as the group's `update-type`. A group containing one minor and three patches reports `semver-minor`, which only auto-merges if the group's `dependency-type` is `direct:development` and the group is not a security update.
+Grouped updates (per `dependabot.yml`'s `groups` block) report the highest semver bump in the group as the group's `update-type`. A group containing one minor and three patches reports `semver-minor`, which only auto-merges if the group's `dependency-type` is `direct:development`.
 
 ## Security Hardening (Public Repo)
 
@@ -192,7 +186,7 @@ Out of scope (not addressed by this feature):
 - `allow_auto_merge=true` on the repo.
 - Branch protection on `develop` requires the four existing CI checks to pass; admin enforcement is off; required reviews is 0.
 - `.github/workflows/dependabot-auto-merge.yml` exists, restricted to `dependabot[bot]`, with SHA-pinned `dependabot/fetch-metadata`, no PR-head checkout, and `permissions:` scoped to `pull-requests: write` and `contents: write` only.
-- Workflow merges PRs whose `update-type` and `dependency-type` (and security flag) match the eligibility matrix, and logs a structured skip line for those that do not.
+- Workflow merges PRs whose `update-type` and `dependency-type` match the eligibility matrix, and logs a structured skip line for those that do not.
 - Merge style is `--merge` (merge commit), preserving `dependabot[bot]` authorship and the `commits.md` exemption.
 - `docs/policies/dependabot.md` exists and documents the matrix, kill switches, branch-protection contract, and the trusted-committer boundary.
 - `docs/policies/00-development-policy.md` and `docs/policies/commits.md` cross-link to the new policy.

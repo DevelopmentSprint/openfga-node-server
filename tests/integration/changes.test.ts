@@ -214,7 +214,7 @@ describeIfDb('GET /stores/:storeId/changes', () => {
     const reused = await app.fetch(get(storeId, `?continuation_token=${encodeURIComponent(tokenForDoc)}`))
     expect(reused.status).toBe(400)
     const body = await reused.json() as { code: string }
-    expect(body.code).toBe('invalid_argument')
+    expect(body.code).toBe('query_string_type_continuation_token_mismatch')
   })
 
   it('rejects a continuation_token issued under ?type=doc when re-presented with ?type=folder', async () => {
@@ -232,7 +232,7 @@ describeIfDb('GET /stores/:storeId/changes', () => {
     )
     expect(swapped.status).toBe(400)
     const body = await swapped.json() as { code: string }
-    expect(body.code).toBe('invalid_argument')
+    expect(body.code).toBe('query_string_type_continuation_token_mismatch')
   })
 
   it('rejects a token issued WITHOUT type when re-presented WITH a type filter', async () => {
@@ -250,7 +250,7 @@ describeIfDb('GET /stores/:storeId/changes', () => {
     )
     expect(swapped.status).toBe(400)
     const body = await swapped.json() as { code: string }
-    expect(body.code).toBe('invalid_argument')
+    expect(body.code).toBe('query_string_type_continuation_token_mismatch')
   })
 
   // Regression for openfga-ra9 review: same-transaction inserts
@@ -280,21 +280,21 @@ describeIfDb('GET /stores/:storeId/changes', () => {
     }
   })
 
-  it('returns 400 invalid_argument for a malformed continuation_token', async () => {
+  it('returns 400 invalid_continuation_token for a malformed continuation_token', async () => {
     const app = buildApp()
     const storeId = await setupStore()
     const res = await app.fetch(get(storeId, '?continuation_token=not-real'))
     expect(res.status).toBe(400)
     const body = await res.json() as { code: string }
-    expect(body.code).toBe('invalid_argument')
+    expect(body.code).toBe('invalid_continuation_token')
   })
 
-  it('returns 400 invalid_argument for a malformed start_time', async () => {
+  it('returns 400 validation_error for a malformed start_time', async () => {
     const app = buildApp()
     const storeId = await setupStore()
     const res = await app.fetch(get(storeId, '?start_time=not-a-timestamp'))
     expect(res.status).toBe(400)
     const body = await res.json() as { code: string }
-    expect(body.code).toBe('invalid_argument')
+    expect(body.code).toBe('validation_error')
   })
 })

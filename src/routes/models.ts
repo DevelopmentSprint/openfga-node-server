@@ -16,6 +16,7 @@ import {
   writeAuthorizationModel,
 } from '../storage/authorization-models'
 import { validate } from '../middleware/validation'
+import { modelNotFound, INVALID_CONTINUATION_TOKEN } from './_helpers/model-errors'
 import { ModelIdParam, ModelListQuery, WriteAuthorizationModelBody } from './schemas'
 import { formatDslError, isDslContentType } from './_helpers/dsl'
 
@@ -49,7 +50,7 @@ modelsRoutes.post('/stores/:storeId/authorization-models', async (c) => {
     const raw = await c.req.json().catch(() => ({}))
     const parsed = WriteAuthorizationModelBody.safeParse(raw)
     if (!parsed.success) {
-      return c.json({ code: 'invalid_argument', message: 'request validation failed' }, 400)
+      return c.json({ code: 'validation_error', message: 'request validation failed' }, 400)
     }
     model = parsed.data as Partial<AuthorizationModel>
   }
@@ -85,7 +86,7 @@ modelsRoutes.get(
         if (cursor.store !== storeId || typeof cursor.id !== 'string' || !/^[0-9A-HJKMNP-TV-Z]{26}$/.test(cursor.id)) throw new Error('invalid cursor')
         after = cursor.id
       }
-      catch { return c.json({ code: 'invalid_continuation_token', message: 'Invalid continuation token' }, 400) }
+      catch { return c.json(INVALID_CONTINUATION_TOKEN, 400) }
     }
     const { rows, next } = await listAuthorizationModelsPage(storeId, pageSize, after)
     return c.json({
@@ -103,7 +104,7 @@ modelsRoutes.get(
 modelsRoutes.get('/stores/:storeId/authorization-models/:id', validate('param', ModelIdParam), async (c) => {
   const { storeId, id } = c.req.valid('param')
   const row = await getAuthorizationModel(storeId, id)
-  if (!row) return c.json({ code: 'not_found', message: 'model not found' }, 404)
+  if (!row) return modelNotFound(c, storeId, id)
   return c.json({
     authorization_model: {
       id: row.id,

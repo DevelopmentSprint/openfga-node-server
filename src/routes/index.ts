@@ -36,6 +36,7 @@
  */
 import { logger } from '../logger'
 import { ConditionError } from '../evaluator/conditions'
+import { ModelReferenceError } from './_helpers/evaluation-validation'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { httpInstrumentationMiddleware as honoOtel } from '@hono/otel'
@@ -66,7 +67,7 @@ export function buildApp(): Hono {
     return c.text('404 Not Found', 404)
   })
   app.onError((error, c) => {
-    if (error instanceof ConditionError) return c.json({ code: error.code, message: error.message }, 400)
+    if (error instanceof ConditionError || error instanceof ModelReferenceError) return c.json({ code: error.code, message: error.message }, 400)
     logger.error({ err: error }, 'request_failed')
     return c.json({ code: 'internal_error', message: 'Internal Server Error' }, 500)
   })
