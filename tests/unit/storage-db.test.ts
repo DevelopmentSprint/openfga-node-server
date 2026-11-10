@@ -182,14 +182,33 @@ describe('TablePrefixPlugin', () => {
     expect(compiled.sql).toMatch(/from "app_authz_tuple"/i)
   })
 
-  it('does not double-prefix already-prefixed names (idempotent)', () => {
-    const db = buildCompiler([
-      new TablePrefixPlugin('openfga_'),
-      new TablePrefixPlugin('openfga_'),
-    ])
-    const compiled = db.selectFrom('store').select('id').compile()
-    // Two passes of the same prefix should still produce a single prefix.
-    expect(compiled.sql).toMatch(/from "openfga_store"/i)
+  it('prefixes logical tables whose names begin with the prefix (namespace `tuple`)', () => {
+    // Regression: a startsWith(prefix) skip left `tuple_change` unprefixed
+    // under namespace `tuple` (prefix `tuple_`), so queries hit a
+    // non-existent or wrong physical table.
+    const db = buildCompiler([new TablePrefixPlugin('tuple_')])
+    const change = db.selectFrom('tuple_change').select('store_id').compile()
+    expect(change.sql).toMatch(/from "tuple_tuple_change"/i)
+    const tuple = db.selectFrom('tuple').select('store_id').compile()
+    expect(tuple.sql).toMatch(/from "tuple_tuple"/i)
+  })
+
+  it('leaves the migrator tracking tables (exact physical names) untouched', () => {
+    const db = buildCompiler([new TablePrefixPlugin('tuple_')])
+    const sqlText = (name: string) =>
+      db.selectFrom(name as never).select('name' as never).compile().sql
+    expect(sqlText('tuple_kysely_migration')).toMatch(/from "tuple_kysely_migration"/i)
+    expect(sqlText('tuple_kysely_migration_lock')).toMatch(/from "tuple_kysely_migration_lock"/i)
+  })
+
+  it('leaves already-physical foreign-key references() targets untouched', () => {
+    const db = buildCompiler([new TablePrefixPlugin('openfga_')])
+    const compiled = db.schema
+      .createTable('child')
+      .addColumn('store_id', 'text', col => col.references('openfga_store.id'))
+      .compile()
+    expect(compiled.sql).toMatch(/create table "openfga_child"/i)
+    expect(compiled.sql).toMatch(/references "openfga_store" \("id"\)/i)
     expect(compiled.sql).not.toMatch(/openfga_openfga_/)
   })
 
