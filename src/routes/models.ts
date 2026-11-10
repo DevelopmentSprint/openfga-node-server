@@ -16,7 +16,7 @@ import {
   writeAuthorizationModel,
 } from '../storage/authorization-models'
 import { validate } from '../middleware/validation'
-import { ModelListQuery, WriteAuthorizationModelBody } from './schemas'
+import { ModelIdParam, ModelListQuery, WriteAuthorizationModelBody } from './schemas'
 import { formatDslError, isDslContentType } from './_helpers/dsl'
 
 export const modelsRoutes = new Hono()
@@ -100,9 +100,8 @@ modelsRoutes.get(
   },
 )
 
-modelsRoutes.get('/stores/:storeId/authorization-models/:id', async (c) => {
-  const storeId = c.req.param('storeId')
-  const id = c.req.param('id')
+modelsRoutes.get('/stores/:storeId/authorization-models/:id', validate('param', ModelIdParam), async (c) => {
+  const { storeId, id } = c.req.valid('param')
   const row = await getAuthorizationModel(storeId, id)
   if (!row) return c.json({ code: 'not_found', message: 'model not found' }, 404)
   return c.json({

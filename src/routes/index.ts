@@ -29,13 +29,15 @@
  * sub-app's routes resolve):
  *
  *   1. requestLog   structured log line per request
- *   2. auth         /stores/* — none | preshared | oidc per config
- *   3. requireStore /stores/:storeId/* — 404 on unknown store
- *   4. idempotency  Idempotency-Key for configured mutating endpoints
+ *   2. bodyLimit    1 MiB cap on request bodies — 413 JSON envelope
+ *   3. auth         /stores/* — none | preshared | oidc per config
+ *   4. requireStore /stores/:storeId/* — 404 on unknown store
+ *   5. idempotency  Idempotency-Key for configured mutating endpoints
  */
 import { logger } from '../logger'
 import { ConditionError } from '../evaluator/conditions'
 import { Hono } from 'hono'
+import { bodyLimit } from 'hono/body-limit'
 import { httpInstrumentationMiddleware as honoOtel } from '@hono/otel'
 import { config } from '../config'
 import { authMiddleware, getAuthConfig } from '../middleware/auth'
@@ -49,8 +51,20 @@ import { modelsRoutes } from './models'
 import { storesRoutes } from './stores'
 import { tuplesRoutes } from './tuples'
 
+/** Maximum accepted request body size. A code constant, not configuration. */
+export const MAX_BODY_BYTES = 1024 * 1024
+
 export function buildApp(): Hono {
   const app = new Hono()
+  // Unmatched routes under /stores/* use the JSON error envelope
+  // (upstream NotFoundErrorCode `undefined_endpoint`) instead of Hono's
+  // plain-text 404.
+  app.notFound((c) => {
+    if (c.req.path === '/stores' || c.req.path.startsWith('/stores/')) {
+      return c.json({ code: 'undefined_endpoint', message: 'Endpoint not enabled' }, 404)
+    }
+    return c.text('404 Not Found', 404)
+  })
   app.onError((error, c) => {
     if (error instanceof ConditionError) return c.json({ code: error.code, message: error.message }, 400)
     logger.error({ err: error }, 'request_failed')
@@ -68,6 +82,22 @@ export function buildApp(): Hono {
   }
 
   app.use('*', requestLog)
+
+  // Request body size cap. FIRST body-touching middleware: idempotency
+  // hashes the whole body and validation parses it, so an oversized
+  // body must be refused before either reads it. Enforced against
+  // Content-Length when present and against the streamed byte count
+  // otherwise (chunked uploads).
+  app.use(
+    '*',
+    bodyLimit({
+      maxSize: MAX_BODY_BYTES,
+      onError: c => c.json(
+        { code: 'payload_too_large', message: `request body exceeds the ${MAX_BODY_BYTES} byte limit` },
+        413,
+      ),
+    }),
+  )
 
   // Caller authentication. Mounted on /stores/* so /health stays
   // reachable for liveness probes without credentials. Mode is chosen
