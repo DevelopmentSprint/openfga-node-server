@@ -123,6 +123,12 @@ export const ListStoresQuery = z.object({
   continuation_token: z.string().optional(),
 }).passthrough()
 
+/** Path params for GET /stores/:storeId/authorization-models/:id. */
+export const ModelIdParam = z.object({
+  storeId: z.string(),
+  id: z.string().regex(/^[0-9A-HJKMNP-TV-Z]{26}$/),
+})
+
 export const ModelListQuery = z.object({
   page_size: z.coerce.number().int().min(1).max(100).optional(),
   continuation_token: z.string().optional(),
@@ -131,7 +137,9 @@ export const ModelListQuery = z.object({
 // ─── POST /stores ─────────────────────────────────────────────────
 
 export const CreateStoreBody = z.object({
-  name: z.string().trim().min(1),
+  // Upstream OpenFGA bounds store names to 3..64 characters; only the
+  // upper bound is enforced here (existing 1-char names stay valid).
+  name: z.string().trim().min(1).max(64),
 }).passthrough()
 
 // ─── POST /stores/:storeId/authorization-models ───────────────────
@@ -190,7 +198,7 @@ export const ReadBody = z.object({
   // Reject 0: a page of zero rows is meaningless on the wire and
   // would otherwise reach readTuplesPage's slice logic which assumes
   // page.length >= 1 when rows exist. See openfga-5uv review.
-  page_size: z.number().int().positive().optional(),
+  page_size: z.number().int().min(1).max(100).optional(),
   continuation_token: z.string().optional(),
 }).passthrough()
 

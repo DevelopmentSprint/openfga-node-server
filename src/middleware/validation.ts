@@ -9,7 +9,7 @@
  *
  *   - For `target === 'json'`, pre-parses the body in a try/catch so a
  *     malformed JSON body gets the same flat
- *     `{ code: 'invalid_argument', message: 'request validation failed' }`
+ *     `{ code: 'validation_error', message: 'request validation failed' }`
  *     envelope as a schema-rejection.
  *   - For all targets, maps schema-validation failures into the same
  *     envelope via the validator hook.
@@ -25,7 +25,7 @@ import type { Context, Next, ValidationTargets } from 'hono'
 type Target = keyof ValidationTargets
 
 const INVALID_ARGUMENT = {
-  code: 'invalid_argument',
+  code: 'validation_error',
   message: 'request validation failed',
 } as const
 

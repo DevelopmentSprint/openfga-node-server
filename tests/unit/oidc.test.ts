@@ -8,11 +8,13 @@
  * pointing at the fixture server so no real-world OIDC discovery
  * fires during tests.
  */
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Hono } from 'hono'
 import { serve } from '@hono/node-server'
 import { SignJWT, exportJWK, generateKeyPair, type CryptoKey, type JWK } from 'jose'
-import { oidcMiddleware } from '../../src/middleware/oidc'
+import { oidcMiddleware, resetOidcDiscoveryCacheForTests } from '../../src/middleware/oidc'
+import { getAuthPrincipal } from '../../src/middleware/caller'
+import { logger } from '../../src/logger'
 import type { OidcConfig } from '../../src/middleware/oidc'
 
 interface KeyMaterial {
@@ -140,6 +142,10 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await fixture.shutdown()
+})
+
+beforeEach(() => {
+  resetOidcDiscoveryCacheForTests()
 })
 
 describe('oidcMiddleware — happy path', () => {
@@ -294,5 +300,61 @@ describe('oidcMiddleware — JWKS rotation', () => {
 
     // Clean up so other tests' fixtures aren't affected.
     fixture.rotated = null
+  })
+})
+
+describe('oidcMiddleware — required exp claim (openfga-k2a.3)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('rejects a correctly signed token that carries no exp claim, logging time_claim_invalid', async () => {
+    const warn = vi.spyOn(logger, 'warn')
+    const now = Math.floor(Date.now() / 1000)
+    const token = await new SignJWT({})
+      .setProtectedHeader({ alg: 'RS256', kid: fixture.rs256.kid })
+      .setIssuedAt(now)
+      .setNotBefore(now - 1)
+      .setIssuer(fixture.issuer)
+      .setAudience('openfga-test')
+      .sign(fixture.rs256.privateKey)
+
+    const res = await bearer(buildApp(defaultConfig(fixture)), `Bearer ${token}`)
+    expect(res.status).toBe(401)
+    expect(await res.json()).toEqual({
+      code: 'unauthenticated',
+      message: 'missing or invalid Authorization header',
+    })
+    const rejection = warn.mock.calls.find(call => call[1] === 'auth_rejected')
+    expect(rejection?.[0]).toMatchObject({ reason: 'time_claim_invalid' })
+  })
+})
+
+describe('oidcMiddleware — Bearer scheme case (RFC 7235, openfga-k2a.3)', () => {
+  it.each(['bearer', 'BEARER', 'BeArEr'])('accepts the %s scheme spelling', async (scheme) => {
+    const token = await makeJwt(fixture, { key: fixture.rs256 })
+    const res = await bearer(buildApp(defaultConfig(fixture)), `${scheme} ${token}`)
+    expect(res.status).toBe(200)
+  })
+})
+
+describe('oidcMiddleware — caller principal (openfga-k2a.3)', () => {
+  function principalApp(cfg: OidcConfig): Hono {
+    const app = new Hono()
+    app.use('/stores/*', oidcMiddleware(cfg))
+    app.get('/stores/anything', c => c.json({ principal: getAuthPrincipal(c) }))
+    return app
+  }
+
+  it('exposes a principal derived from sub and client, distinct per subject', async () => {
+    const app = principalApp(defaultConfig(fixture))
+    const alice = await makeJwt(fixture, { key: fixture.rs256, subject: 'alice', claims: { azp: 'svc-1' } })
+    const bob = await makeJwt(fixture, { key: fixture.rs256, subject: 'bob', claims: { azp: 'svc-1' } })
+    const pa = (await (await bearer(app, `Bearer ${alice}`)).json()) as { principal: string }
+    const pb = (await (await bearer(app, `Bearer ${bob}`)).json()) as { principal: string }
+    expect(pa.principal).toMatch(/^oidc:/)
+    expect(pa.principal).toContain('alice')
+    expect(pa.principal).not.toBe(pb.principal)
+    expect(pa.principal).not.toContain(alice)
   })
 })

@@ -16,11 +16,13 @@ import {
   applyTupleMutations,
   listChangesPage,
   readTuplesPage,
+  StoreNotFoundError,
   type ReadTupleCursor,
   type TupleConflictMode,
 } from '../storage/tuples'
 import { loadModelIndex } from '../storage/engine-context'
 import { validate } from '../middleware/validation'
+import { modelNotFound, INVALID_CONTINUATION_TOKEN } from './_helpers/model-errors'
 import { ChangesQuery, ReadBody, WriteBody } from './schemas'
 import { validateWriteTupleKey } from './write-validation'
 import {
@@ -31,6 +33,9 @@ import {
   type ChangeCursor,
 } from './_helpers/cursors'
 
+/** Upstream OpenFGA's default cap on writes + deletes per Write call. */
+const MAX_TUPLES_PER_WRITE = 100
+
 export const tuplesRoutes = new Hono()
 
 tuplesRoutes.post('/stores/:storeId/write', validate('json', WriteBody), async (c) => {
@@ -39,6 +44,13 @@ tuplesRoutes.post('/stores/:storeId/write', validate('json', WriteBody), async (
   const writes = body.writes?.tuple_keys ?? []
   const deletes = body.deletes?.tuple_keys ?? []
 
+  if (writes.length + deletes.length > MAX_TUPLES_PER_WRITE) {
+    return c.json({
+      code: 'exceeded_entity_limit',
+      message: `The number of write and delete operations (${writes.length + deletes.length}) exceeds the allowed limit of ${MAX_TUPLES_PER_WRITE}`,
+    }, 400)
+  }
+
   const onDuplicate = body.writes?.on_duplicate ?? 'error'
   const onMissing = body.deletes?.on_missing ?? 'error'
 
@@ -46,13 +58,13 @@ tuplesRoutes.post('/stores/:storeId/write', validate('json', WriteBody), async (
     ? await loadModelIndex(storeId, body.authorization_model_id)
     : null
   if ((writes.length > 0 || body.authorization_model_id) && !ctx) {
-    return c.json({ code: 'not_found', message: 'authorization model not found' }, 404)
+    return modelNotFound(c, storeId, body.authorization_model_id)
   }
 
   if (ctx) {
     for (const tuple of writes) {
       const invalid = validateWriteTupleKey(ctx.index, tuple)
-      if (invalid) return c.json({ code: 'invalid_argument', message: invalid }, 400)
+      if (invalid) return c.json({ code: 'validation_error', message: invalid }, 400)
     }
   }
 
@@ -67,6 +79,11 @@ tuplesRoutes.post('/stores/:storeId/write', validate('json', WriteBody), async (
   catch (err) {
     if (err instanceof DuplicateTupleError || err instanceof MissingTupleError) {
       return c.json({ code: 'write_failed_due_to_invalid_input', message: err.message }, 400)
+    }
+    // requireStore checked the store before the transaction; this
+    // covers a deleteStore that commits in between.
+    if (err instanceof StoreNotFoundError) {
+      return c.json({ code: 'store_id_not_found', message: err.message }, 404)
     }
     throw err
   }
@@ -84,7 +101,7 @@ tuplesRoutes.post('/stores/:storeId/read', validate('json', ReadBody), async (c)
   if (body.continuation_token !== undefined && body.continuation_token.length > 0) {
     cursor = decodeReadCursor(body.continuation_token)
     if (cursor === null) {
-      return c.json({ code: 'invalid_argument', message: 'continuation_token is malformed' }, 400)
+      return c.json(INVALID_CONTINUATION_TOKEN, 400)
     }
   }
   let page
@@ -137,13 +154,13 @@ tuplesRoutes.get('/stores/:storeId/changes', validate('query', ChangesQuery), as
   if (suppliedToken !== null) {
     cursor = decodeChangeCursor(suppliedToken)
     if (cursor === null) {
-      return c.json({ code: 'invalid_argument', message: 'continuation_token is malformed' }, 400)
+      return c.json(INVALID_CONTINUATION_TOKEN, 400)
     }
     // Cross-filter token reuse is rejected: a token issued under one
     // type filter is not valid under a different filter.
     if (cursor.type !== requestType) {
       return c.json({
-        code: 'invalid_argument',
+        code: 'query_string_type_continuation_token_mismatch',
         message: cursor.type === null
           ? 'continuation_token was issued without a type filter; do not pass `type` on the continuation call'
           : `continuation_token was issued with type=${cursor.type}; the same type filter must be supplied`,

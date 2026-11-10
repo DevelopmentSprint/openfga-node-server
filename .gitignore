@@ -4,9 +4,23 @@ dist
 .worktrees/
 *.log
 .env
-.env.local
+.env.*
+!.env.example
 .DS_Store
 coverage
+
+# Local config may hold DB passwords, preshared keys, and OTLP headers.
+# Only the *.example variants are tracked.
+openfga.config.yaml
+openfga.config.yml
+openfga.config.toml
+openfga.config.json
+openfga.config.jsonc
+openfga.config.json5
+openfga.config.ts
+openfga.config.js
+openfga.config.mjs
+openfga.config.cjs
 
 # Local-dev TLS certs (mkcert via `pnpm cert:create`)
 .certs/
@@ -18,3 +32,11 @@ coverage
 
 # Explicitly requested local Beads backups contain private work notes.
 /.beads-export-backup-*/
+
+# Local agent tooling (never committed)
+.mcp.json
+.openrig/
+.agents/
+.claude/plugins/
+.claude/skills/
+.beads.gate.lock

@@ -48,7 +48,7 @@ function postRaw(path: string, raw: string): Request {
 async function expectInvalidArgument(res: Response): Promise<void> {
   expect(res.status).toBe(400)
   const body = await res.json() as { code: string, message: string }
-  expect(body.code).toBe('invalid_argument')
+  expect(body.code).toBe('validation_error')
   expect(typeof body.message).toBe('string')
 }
 
@@ -191,7 +191,7 @@ describe('request validation — accepted user shapes pass the boundary', () => 
   // These cases exercise USER_REF on /check. Each request fails
   // somewhere downstream of validation (either the route's storeId
   // lookup or the model lookup), but the load-bearing assertion is
-  // that none of them is rejected with a 400 invalid_argument from
+  // that none of them is rejected with a 400 validation_error from
   // the validation layer. The list covers the three structural
   // shapes (concrete, userset, wildcard) plus OpenFGA-spec example
   // identifiers that contain '/' and '.' — see the openfga-vnl
@@ -238,7 +238,7 @@ describe('request validation — accepted object shapes pass the boundary', () =
 })
 
 describe('request validation — malformed JSON', () => {
-  it('returns invalid_argument for unparseable JSON body on /stores', async () => {
+  it('returns validation_error for unparseable JSON body on /stores', async () => {
     await expectInvalidArgument(await app.fetch(postRaw('/stores', '{ this is not json')))
   })
 })
@@ -258,7 +258,7 @@ describe('request validation — unknown fields are passed through', () => {
     }))
     // Validation passes — the request reaches the route handler, which
     // then 404s because the store/model doesn't exist. The test asserts
-    // that we did NOT get a 400 invalid_argument from validation.
+    // that we did NOT get a 400 validation_error from validation.
     expect(res.status).not.toBe(400)
   })
 })

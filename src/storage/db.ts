@@ -365,3 +365,10 @@ export async function resetDb(): Promise<void> {
   _pgResolved = null
   if (previous) await previous.destroy()
 }
+
+/**
+ * Release the database pool / driver during graceful shutdown.
+ * Same teardown as `resetDb()`; exported under a production-facing
+ * name so `src/server.ts` does not call a test-named helper.
+ */
+export const closeDb = resetDb

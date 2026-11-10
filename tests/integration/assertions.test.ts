@@ -132,10 +132,10 @@ describeIfDb('GET/PUT /stores/:storeId/assertions/:authorizationModelId', () => 
     expect(res.status).toBe(404)
   })
 
-  it('PUT returns 404 when the requested authorization_model_id does not exist on the store', async () => {
+  it('PUT returns 400 when the requested authorization_model_id does not exist on the store', async () => {
     const { app, storeId } = await setup()
     const res = await app.fetch(putReq(storeId, '01ZZZZZZZZZZZZZZZZZZZZZZZZ', { assertions: [] }))
-    expect(res.status).toBe(404)
+    expect(res.status).toBe(400)
   })
 
   it('PUT rejects assertions with malformed object reference at the validation boundary', async () => {
@@ -150,7 +150,7 @@ describeIfDb('GET/PUT /stores/:storeId/assertions/:authorizationModelId', () => 
     }))
     expect(res.status).toBe(400)
     const body = await res.json() as { code: string }
-    expect(body.code).toBe('invalid_argument')
+    expect(body.code).toBe('validation_error')
   })
 
   it('PUT rejects bodies missing the assertions field', async () => {
@@ -158,6 +158,6 @@ describeIfDb('GET/PUT /stores/:storeId/assertions/:authorizationModelId', () => 
     const res = await app.fetch(putReq(storeId, modelId, {}))
     expect(res.status).toBe(400)
     const body = await res.json() as { code: string }
-    expect(body.code).toBe('invalid_argument')
+    expect(body.code).toBe('validation_error')
   })
 })

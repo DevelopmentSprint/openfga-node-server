@@ -15,16 +15,20 @@
  * The middleware factory does NOT block on JWKS contents — the set is
  * lazily fetched on first request via jose.createRemoteJWKSet. OIDC
  * issuer discovery (resolving the `jwks_uri` from
- * `${issuer}/.well-known/openid-configuration`) happens at factory
- * call time when no explicit `jwksUri` is configured. A discovery
- * failure is fatal: it surfaces as a thrown `OidcDiscoveryError` so
- * the server bootstrap can log FATAL and exit before binding any
- * listener.
+ * `${issuer}/.well-known/openid-configuration`) runs once per distinct
+ * OIDC config and is shared, via one memoized promise, between the
+ * boot-time `prefetchOidcJwks` and every middleware built for that
+ * config. A boot-time discovery failure is fatal: it surfaces as a
+ * thrown `OidcDiscoveryError` so the server bootstrap can log FATAL and
+ * exit before binding any listener. A failure is never cached
+ * permanently: after a short backoff the next request (or the next
+ * prefetch, immediately) runs discovery again (openfga-k2a.3).
  */
 import type { Context, MiddlewareHandler } from 'hono'
 import { createRemoteJWKSet, errors as joseErrors, jwtVerify, type JWTPayload, type JWTVerifyGetKey } from 'jose'
 import { logger } from '../logger'
 import type { Config } from '../config-schema'
+import { oidcPrincipal, parseBearerToken, setAuthPrincipal } from './caller'
 
 export type OidcConfig = Config['auth']['oidc']
 
@@ -35,6 +39,13 @@ const ENVELOPE_401 = {
 
 const DISCOVERY_TIMEOUT_MS = 5_000
 const DISCOVERY_RETRY_COUNT = 1
+/**
+ * After a failed discovery, requests inside this window reuse the
+ * failure (401 jwks_unavailable) instead of each re-running discovery
+ * against an issuer that just failed. The first request after the
+ * window starts a fresh attempt.
+ */
+const DISCOVERY_FAILURE_BACKOFF_MS = 5_000
 
 interface OidcDiscoveryDocument {
   jwks_uri?: string
@@ -107,37 +118,71 @@ function reject(c: Context, ctx: LogContext, reason: string, extra: Record<strin
   return c.json(ENVELOPE_401, 401)
 }
 
-/**
- * Build the OIDC middleware. Resolves the JWKS URI eagerly (issuer
- * discovery or explicit config) so a misconfigured issuer is fatal
- * before any listener binds. Per-request validation runs entirely
- * via jose.jwtVerify against the constructed JWKS.
- */
-type JwksReady =
-  | { ok: true, jwks: JWTVerifyGetKey }
-  | { ok: false, err: unknown }
+interface DiscoveryEntry {
+  promise: Promise<JWTVerifyGetKey>
+  /** `Date.now()` when `promise` rejected; null while pending or resolved. */
+  failedAt: number | null
+}
 
+/**
+ * One discovery per distinct OIDC config. Keyed by the fields that
+ * determine the resulting key set, not by object identity, so the boot
+ * prefetch and the middleware share an entry even when they receive
+ * different (but equal) config objects.
+ */
+const discoveryCache = new Map<string, DiscoveryEntry>()
+
+function discoveryCacheKey(oidc: OidcConfig): string {
+  return JSON.stringify([oidc.issuer ?? null, oidc.jwksUri ?? null, oidc.jwksCacheMaxAgeMs, oidc.jwksCooldownMs])
+}
+
+/**
+ * Return the shared JWKS promise for `oidc`, starting discovery when
+ * there is none yet, or when the previous attempt failed and either
+ * the backoff has elapsed or `retryFailedNow` is set. Successful
+ * results are kept for the life of the process (jose handles key
+ * rotation within the resolved JWKS URI).
+ */
+function getSharedJwks(oidc: OidcConfig, retryFailedNow = false): Promise<JWTVerifyGetKey> {
+  const cacheKey = discoveryCacheKey(oidc)
+  const existing = discoveryCache.get(cacheKey)
+  if (existing) {
+    if (existing.failedAt === null) return existing.promise
+    if (!retryFailedNow && Date.now() - existing.failedAt < DISCOVERY_FAILURE_BACKOFF_MS) return existing.promise
+  }
+
+  const entry: DiscoveryEntry = { promise: buildJWKS(oidc), failedAt: null }
+  discoveryCache.set(cacheKey, entry)
+  // The handler both records the failure time and marks the rejection
+  // as handled, so a discovery nobody has awaited yet cannot trip
+  // Node's unhandled-rejection crash. Awaiting `entry.promise` later
+  // still observes the rejection.
+  entry.promise.catch((err: unknown) => {
+    entry.failedAt = Date.now()
+    logger.error({ err, reason: 'oidc_discovery_failed' }, 'oidc_discovery_failed')
+  })
+  return entry.promise
+}
+
+/** Drop all memoized discovery results. Tests only. */
+export function resetOidcDiscoveryCacheForTests(): void {
+  discoveryCache.clear()
+}
+
+/**
+ * Build the OIDC middleware. Kicks off (or joins) the shared discovery
+ * for this config so the first request does not pay the cold-start
+ * cost. Per-request validation runs via jose.jwtVerify against the
+ * resolved JWKS. If discovery has failed, the request is rejected with
+ * `jwks_unavailable` and a later request retries discovery.
+ *
+ * For fail-fast boot behavior, callers should await
+ * prefetchOidcJwks(oidc) BEFORE binding any listener so the
+ * OidcDiscoveryError is observed by the bootstrap rather than the
+ * first request handler.
+ */
 export function oidcMiddleware(oidc: OidcConfig): MiddlewareHandler {
-  // Kick off JWKS resolution at factory time so a follow-up request
-  // doesn't pay the cold-start cost. The result is materialized into
-  // a *non-rejecting* promise — Node's unhandled-rejection signal
-  // fires for promises whose rejection nobody has awaited yet, so a
-  // raw rejected promise here would crash the process on boot when
-  // discovery fails even though we intend to surface the failure
-  // per-request below. The sentinel pattern keeps the promise
-  // resolved-always; the middleware checks .ok at request time.
-  //
-  // For fail-fast boot behavior, callers should await
-  // prefetchOidcJwks(oidc) BEFORE binding any listener so the
-  // OidcDiscoveryError is observed by the bootstrap rather than the
-  // first request handler.
-  const jwksReady: Promise<JwksReady> = buildJWKS(oidc).then(
-    (jwks): JwksReady => ({ ok: true, jwks }),
-    (err: unknown): JwksReady => {
-      logger.fatal({ err, reason: 'oidc_discovery_failed' }, 'oidc_setup_failed')
-      return { ok: false, err }
-    },
-  )
+  void getSharedJwks(oidc).catch(() => { /* surfaced per request */ })
 
   const issuerAccepts = [
     oidc.issuer!, // schema enforces presence
@@ -150,23 +195,19 @@ export function oidcMiddleware(oidc: OidcConfig): MiddlewareHandler {
   return async (c, next) => {
     const ctx: LogContext = { method: c.req.method, path: c.req.path }
 
-    const header = c.req.header('Authorization')
-    if (!header) {
-      return reject(c, ctx, 'missing_authorization')
+    const parsed = parseBearerToken(c.req.header('Authorization'))
+    if (!parsed.ok) {
+      return reject(c, ctx, parsed.reason)
     }
-    if (!header.startsWith('Bearer ')) {
-      return reject(c, ctx, 'wrong_scheme')
-    }
-    const token = header.slice('Bearer '.length).trim()
-    if (!token) {
-      return reject(c, ctx, 'missing_authorization')
-    }
+    const token = parsed.token
 
-    const ready = await jwksReady
-    if (!ready.ok) {
-      return reject(c, ctx, 'jwks_unavailable', { err: errString(ready.err) })
+    let jwks: JWTVerifyGetKey
+    try {
+      jwks = await getSharedJwks(oidc)
     }
-    const jwks = ready.jwks
+    catch (err) {
+      return reject(c, ctx, 'jwks_unavailable', { err: errString(err) })
+    }
 
     let payload: JWTPayload
     try {
@@ -175,6 +216,11 @@ export function oidcMiddleware(oidc: OidcConfig): MiddlewareHandler {
         audience: oidc.audience!, // schema enforces presence
         algorithms: [...algorithms],
         clockTolerance: oidc.clockSkewSec,
+        // A token without `exp` would otherwise never expire.
+        // oidc-auth.md requires exp validation; jose reports a missing
+        // claim as JWTClaimValidationFailed(claim: 'exp'), which
+        // classifyJoseError maps to time_claim_invalid.
+        requiredClaims: ['exp'],
       })
       payload = result.payload
     }
@@ -182,24 +228,26 @@ export function oidcMiddleware(oidc: OidcConfig): MiddlewareHandler {
       return reject(c, ctx, classifyJoseError(err), { err: errString(err) })
     }
 
+    const sub = typeof payload.sub === 'string' ? payload.sub : null
+    const clientId = typeof payload['client_id'] === 'string'
+      ? (payload['client_id'] as string)
+      : typeof payload.azp === 'string'
+        ? payload.azp
+        : null
+
     if (subjectAllowlist.size > 0) {
-      const sub = typeof payload.sub === 'string' ? payload.sub : ''
-      if (!subjectAllowlist.has(sub)) {
-        return reject(c, ctx, 'sub_disallowed', { sub })
+      if (!subjectAllowlist.has(sub ?? '')) {
+        return reject(c, ctx, 'sub_disallowed', { sub: sub ?? '' })
       }
     }
 
     if (clientAllowlist.size > 0) {
-      const clientId = typeof payload['client_id'] === 'string'
-        ? (payload['client_id'] as string)
-        : typeof payload.azp === 'string'
-          ? payload.azp
-          : ''
-      if (!clientAllowlist.has(clientId)) {
-        return reject(c, ctx, 'client_disallowed', { client: clientId })
+      if (!clientAllowlist.has(clientId ?? '')) {
+        return reject(c, ctx, 'client_disallowed', { client: clientId ?? '' })
       }
     }
 
+    setAuthPrincipal(c, oidcPrincipal(sub, clientId))
     await next()
   }
 }
@@ -210,14 +258,14 @@ export function oidcMiddleware(oidc: OidcConfig): MiddlewareHandler {
  * FATAL log at boot rather than as 401s on every authenticated
  * request. Throws `OidcDiscoveryError` on failure.
  *
- * The middleware factory itself runs an independent lazy promise so
- * non-server callers (e.g., tests that mount the middleware directly
- * onto a Hono router) continue to work without a separate prefetch
- * step.
+ * Shares the memoized discovery with `oidcMiddleware`, so a successful
+ * prefetch means the middleware never repeats discovery. A previously
+ * failed attempt is retried immediately (no backoff) so the boot
+ * decision reflects the issuer's current state.
  */
 export async function prefetchOidcJwks(oidc: OidcConfig): Promise<void> {
   try {
-    await buildJWKS(oidc)
+    await getSharedJwks(oidc, true)
   }
   catch (err) {
     if (err instanceof OidcDiscoveryError) throw err
@@ -226,9 +274,9 @@ export async function prefetchOidcJwks(oidc: OidcConfig): Promise<void> {
 }
 
 /**
- * Eagerly build the remote JWKS so the boot path can await it. The
- * function returned by createRemoteJWKSet is a stable reference that
- * memoizes fetches internally via the configured cacheMaxAge and
+ * Resolve the JWKS URI and build the remote key set. The function
+ * returned by createRemoteJWKSet is a stable reference that memoizes
+ * fetches internally via the configured cacheMaxAge and
  * cooldownDuration.
  */
 async function buildJWKS(oidc: OidcConfig): Promise<JWTVerifyGetKey> {
@@ -249,6 +297,8 @@ async function buildJWKS(oidc: OidcConfig): Promise<JWTVerifyGetKey> {
 function classifyJoseError(err: unknown): string {
   if (err instanceof joseErrors.JWTExpired) return 'time_claim_invalid'
   if (err instanceof joseErrors.JWTClaimValidationFailed) {
+    // Also covers a missing required claim (reason: 'missing'), e.g.
+    // a token without `exp` → time_claim_invalid.
     if (err.claim === 'iss') return 'iss_mismatch'
     if (err.claim === 'aud') return 'aud_mismatch'
     if (err.claim === 'nbf' || err.claim === 'iat' || err.claim === 'exp') return 'time_claim_invalid'

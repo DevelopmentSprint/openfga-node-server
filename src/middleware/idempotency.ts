@@ -32,14 +32,31 @@
  * the same route share the same scope but different bodies still
  * produce different fingerprints via the body bytes).
  *
+ * Caller scoping (openfga-k2a.3):
+ *
+ * Records are stored under `scopedIdempotencyKey(principal, key)`, a
+ * SHA-256 of the authenticated principal (set by the auth middleware,
+ * see ./caller.ts) and the client's key. Two callers that pick the
+ * same Idempotency-Key never see each other's records: no replay, no
+ * 409/422 that would reveal the key exists. The raw key is never
+ * persisted.
+ *
+ * Keys longer than MAX_IDEMPOTENCY_KEY_LENGTH are rejected with 400.
+ *
  * Storage failures bubble up as 503 so retries can succeed once the
  * store recovers.
+ *
+ * Only 2xx responses are recorded and replayed (openfga-k2a.14). Any
+ * other status (4xx or 5xx) or a thrown handler releases the claim,
+ * so a retry with the same key re-runs the request instead of
+ * replaying a cached failure.
  */
 import { createHash } from 'node:crypto'
 import type { MiddlewareHandler } from 'hono'
 import { logger } from '../logger'
 import { config } from '../config'
 import { claimKey, completeKey, releaseKey } from '../storage/idempotency'
+import { getAuthPrincipal } from './caller'
 
 export type IdempotencyMode = 'off' | 'optional' | 'required'
 
@@ -62,13 +79,24 @@ export interface IdempotencyOptions {
   ttlMs?: number
 }
 
+/**
+ * Upper bound on the (trimmed) Idempotency-Key length. Generous for
+ * UUIDs, ULIDs, and composite client keys while preventing unbounded
+ * header values from reaching hashing, logs, and storage.
+ */
+export const MAX_IDEMPOTENCY_KEY_LENGTH = 255
+
 const ERROR_ENVELOPES = {
   missing_key: { code: 'invalid_argument', message: 'Idempotency-Key header is required' },
   empty_key: { code: 'invalid_argument', message: 'Idempotency-Key header must not be empty' },
+  key_too_long: { code: 'invalid_argument', message: `Idempotency-Key header must be at most ${MAX_IDEMPOTENCY_KEY_LENGTH} characters` },
   in_flight: { code: 'idempotency_in_flight', message: 'a previous request with this Idempotency-Key is still being processed' },
   mismatch: { code: 'idempotency_fingerprint_mismatch', message: 'Idempotency-Key was reused with a different request fingerprint' },
   unavailable: { code: 'idempotency_store_unavailable', message: 'idempotency store is unavailable; retry later' },
 } as const
+
+/** Statuses whose Response must not carry a body (Fetch spec). */
+const NULL_BODY_STATUSES = new Set([204, 205, 304])
 
 function pathMatches(routePattern: string, requestPath: string): boolean {
   if (routePattern === requestPath) return true
@@ -100,6 +128,16 @@ function fingerprint(method: string, requestPath: string, rawBody: string): stri
   // first store's response under the second store's namespace —
   // a cross-store data leak. See openfga-fot.
   return createHash('sha256').update(`${method} ${requestPath}\n${rawBody}`).digest('hex')
+}
+
+/**
+ * Storage key for a client Idempotency-Key, namespaced by the
+ * authenticated principal. JSON-encoding the pair keeps the boundary
+ * unambiguous (`('a','bc')` and `('ab','c')` differ); hashing keeps the
+ * stored value fixed-length and free of the raw key.
+ */
+export function scopedIdempotencyKey(principal: string, key: string): string {
+  return createHash('sha256').update(JSON.stringify([principal, key])).digest('hex')
 }
 
 function keyHash(key: string): string {
@@ -134,6 +172,12 @@ export function idempotencyMiddleware(options: IdempotencyOptions): MiddlewareHa
       return next()
     }
 
+    if (key.length > MAX_IDEMPOTENCY_KEY_LENGTH) {
+      return c.json(ERROR_ENVELOPES.key_too_long, 400)
+    }
+
+    const storageKey = scopedIdempotencyKey(getAuthPrincipal(c), key)
+
     let rawBody: string
     try {
       rawBody = await c.req.text()
@@ -148,7 +192,7 @@ export function idempotencyMiddleware(options: IdempotencyOptions): MiddlewareHa
 
     let claim
     try {
-      claim = await claimKey(key, fp, ttlMs)
+      claim = await claimKey(storageKey, fp, ttlMs)
     }
     catch (err) {
       logger.error({ err, ...keyLog }, 'idempotency_store_unavailable')
@@ -165,6 +209,13 @@ export function idempotencyMiddleware(options: IdempotencyOptions): MiddlewareHa
     }
     if (claim.kind === 'replay') {
       logger.info({ ...keyLog, replay_status: claim.status }, 'idempotency_replay')
+      // An empty original body (e.g. 204) is stored as NULL and must
+      // replay as an empty body: `new Response('null', { status: 204 })`
+      // throws, and any other status would otherwise replay a literal
+      // `null` the handler never sent.
+      if (claim.body === null || claim.body === undefined || NULL_BODY_STATUSES.has(claim.status)) {
+        return new Response(null, { status: claim.status })
+      }
       return new Response(JSON.stringify(claim.body), {
         status: claim.status,
         headers: { 'content-type': 'application/json' },
@@ -172,31 +223,33 @@ export function idempotencyMiddleware(options: IdempotencyOptions): MiddlewareHa
     }
 
     // claim.kind === 'claimed' — we own the slot. Run the handler,
-    // capture the response, persist it for replay (or drop the slot
-    // on 5xx so retries can succeed).
+    // capture the response, persist it for replay when it is 2xx (or
+    // drop the slot otherwise so retries re-run the request). Every follow-up write carries
+    // the claim token so it is a no-op if our lease expired and
+    // another request reclaimed the key meanwhile.
+    const { token } = claim
+    const release = async (): Promise<void> => {
+      try {
+        const released = await releaseKey(storageKey, token)
+        if (!released) logger.warn(keyLog, 'idempotency_claim_lost')
+      }
+      catch (releaseErr) {
+        logger.error({ err: releaseErr, ...keyLog }, 'idempotency_release_failed')
+      }
+    }
     try {
       await next()
     }
     catch (err) {
       logger.warn({ err, ...keyLog }, 'idempotency_handler_threw')
-      try {
-        await releaseKey(key)
-      }
-      catch (releaseErr) {
-        logger.error({ err: releaseErr, ...keyLog }, 'idempotency_release_failed')
-      }
+      await release()
       throw err
     }
 
     const status = c.res.status
-    if (status >= 500) {
-      logger.info({ ...keyLog, status }, 'idempotency_release_5xx')
-      try {
-        await releaseKey(key)
-      }
-      catch (err) {
-        logger.error({ err, ...keyLog }, 'idempotency_release_failed')
-      }
+    if (status < 200 || status >= 300) {
+      logger.info({ ...keyLog, status }, 'idempotency_release_non_2xx')
+      await release()
       return
     }
 
@@ -204,29 +257,33 @@ export function idempotencyMiddleware(options: IdempotencyOptions): MiddlewareHa
     try {
       const cloned = c.res.clone()
       const text = await cloned.text()
-      body = text === '' ? null : JSON.parse(text)
+      // Empty body → undefined → stored as SQL NULL → replayed empty.
+      body = text === '' ? undefined : JSON.parse(text)
     }
     catch (err) {
       logger.warn({ err, ...keyLog }, 'idempotency_response_capture_failed')
-      try {
-        await releaseKey(key)
-      }
-      catch (releaseErr) {
-        logger.error({ err: releaseErr, ...keyLog }, 'idempotency_release_failed')
-      }
+      await release()
       return
     }
 
     try {
-      await completeKey(key, status, body)
-      logger.info({ ...keyLog, status }, 'idempotency_complete')
+      const completed = await completeKey(storageKey, token, status, body)
+      if (completed) {
+        logger.info({ ...keyLog, status }, 'idempotency_complete')
+      }
+      else {
+        // Our lease expired and another request reclaimed the key.
+        // Leave its row alone; the response still goes to the client.
+        logger.warn({ ...keyLog, status }, 'idempotency_claim_lost')
+      }
     }
     catch (err) {
       logger.error({ err, ...keyLog }, 'idempotency_complete_failed')
-      // Best-effort cleanup. The original response still goes to the
-      // client; the row will eventually be reaped by TTL.
+      // Best-effort cleanup (token-scoped, so it can only remove our
+      // own claim). The original response still goes to the client;
+      // otherwise the lease makes the key reclaimable shortly.
       try {
-        await releaseKey(key)
+        await releaseKey(storageKey, token)
       }
       catch { /* swallow */ }
     }

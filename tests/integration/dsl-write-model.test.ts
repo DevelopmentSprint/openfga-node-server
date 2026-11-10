@@ -145,9 +145,9 @@ describeIfDb('POST /stores/:storeId/authorization-models — content-type negoti
     expect(res.status).toBe(400)
     // The request-validation boundary rejects this body before it
     // reaches the inline type_definitions check; the public contract
-    // is the OpenFGA invalid_argument envelope, not any specific
+    // is the OpenFGA validation_error envelope, not any specific
     // message text.
     const body = await res.json() as { code: string; message: string }
-    expect(body.code).toBe('invalid_argument')
+    expect(body.code).toBe('validation_error')
   })
 })

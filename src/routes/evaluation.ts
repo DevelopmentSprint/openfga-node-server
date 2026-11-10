@@ -12,9 +12,11 @@ import { config } from '../config'
 import { readContext } from '../storage/read-context'
 import { logger } from '../logger'
 import { ConditionError } from '../evaluator/conditions'
+import { ResolutionLimitError, ResolutionTooComplexError } from '../evaluator/limits'
 import { Hono } from 'hono'
 import { stream } from 'hono/streaming'
-import { validateRelation, validateUser, validateObject } from './_helpers/evaluation-validation'
+import { validateRelation, validateUser, validateObject, validateTarget } from './_helpers/evaluation-validation'
+import { modelNotFound } from './_helpers/model-errors'
 import { check } from '../evaluator/check'
 import { expand } from '../evaluator/expand'
 import { listObjects } from '../evaluator/list-objects'
@@ -33,12 +35,27 @@ import { withContextualTuples } from './_helpers/contextual-tuples'
 
 export const evaluationRoutes = new Hono()
 
+/**
+ * Upstream HTTP mapping (pkg/server/errors/encoded_errors.go): validation
+ * ErrorCodes such as authorization_model_resolution_too_complex are 400;
+ * InternalErrorCodes such as deadline_exceeded are 500. Anything else
+ * falls through to the application-wide handler.
+ */
+function resolutionLimitStatus(error: ResolutionLimitError): 400 | 500 {
+  return error instanceof ResolutionTooComplexError ? 400 : 500
+}
+
+evaluationRoutes.onError((error, c) => {
+  if (!(error instanceof ResolutionLimitError)) throw error
+  return c.json({ code: error.code, message: error.message }, resolutionLimitStatus(error))
+})
+
 evaluationRoutes.post('/stores/:storeId/check', validate('json', CheckBody), async (c) => {
   const storeId = c.req.param('storeId')
   const body = c.req.valid('json')
   const tk = body.tuple_key
   const ctx = await loadModelIndex(storeId, body.authorization_model_id)
-  if (!ctx) return c.json({ code: 'not_found', message: 'authorization model not found' }, 404)
+  if (!ctx) return modelNotFound(c, storeId, body.authorization_model_id)
   const store = withContextualTuples(pgTupleStore(storeId, readContext(body.consistency)), body.contextual_tuples?.tuple_keys, ctx.index)
   validateObject(tk.object)
   validateRelation(ctx.index, tk.object.split(':')[0]!, tk.relation)
@@ -61,9 +78,9 @@ evaluationRoutes.post(path, validate('json', ListObjectsBody), async (c) => {
   const storeId = c.req.param('storeId')
   const body = c.req.valid('json')
   const ctx = await loadModelIndex(storeId, body.authorization_model_id)
-  if (!ctx) return c.json({ code: 'not_found', message: 'authorization model not found' }, 404)
+  if (!ctx) return modelNotFound(c, storeId, body.authorization_model_id)
   const store = withContextualTuples(pgTupleStore(storeId, readContext(body.consistency)), body.contextual_tuples?.tuple_keys, ctx.index)
-  validateRelation(ctx.index, body.type, body.relation)
+  validateTarget(ctx.index, body.type, body.relation)
   validateUser(ctx.index, body.user)
   const ids = await traced(
     'evaluator',
@@ -75,7 +92,9 @@ evaluationRoutes.post(path, validate('json', ListObjectsBody), async (c) => {
       'openfga.relation': body.relation,
     }),
     async (span) => {
-      const result = await listObjects(ctx.index, store, body.user, body.relation, body.type, body.context)
+      // Upstream applies the max-results cap to non-streaming ListObjects only.
+      const streamed = c.req.path.endsWith('/streamed-list-objects')
+      const result = await listObjects(ctx.index, store, body.user, body.relation, body.type, body.context, streamed ? { maxResults: 0 } : {})
       span.setAttribute('openfga.result_count', result.length)
       return result
     },
@@ -98,12 +117,11 @@ evaluationRoutes.post('/stores/:storeId/list-users', validate('json', ListUsersB
   const storeId = c.req.param('storeId')
   const body = c.req.valid('json')
   const ctx = await loadModelIndex(storeId, body.authorization_model_id)
-  if (!ctx) return c.json({ code: 'not_found', message: 'authorization model not found' }, 404)
+  if (!ctx) return modelNotFound(c, storeId, body.authorization_model_id)
 
-  validateRelation(ctx.index, body.object.type, body.relation)
+  validateTarget(ctx.index, body.object.type, body.relation)
   const filter = body.user_filters[0]!
-  if (filter.relation) validateRelation(ctx.index, filter.type, filter.relation)
-  else validateUser(ctx.index, `${filter.type}:filter`)
+  validateTarget(ctx.index, filter.type, filter.relation || undefined)
 
   // ListUsersRequest's contextual_tuples is a flat array (unlike
   // check/list-objects) — adapt to the same overlay helper.
@@ -133,7 +151,7 @@ evaluationRoutes.post('/stores/:storeId/list-users', validate('json', ListUsersB
   )
   if (users === null) {
     return c.json({
-      code: 'invalid_argument',
+      code: 'relation_not_found',
       message: `relation "${body.relation}" is not defined for type "${body.object.type}"`,
     }, 400)
   }
@@ -144,7 +162,7 @@ evaluationRoutes.post('/stores/:storeId/expand', validate('json', ExpandBody), a
   const storeId = c.req.param('storeId')
   const body = c.req.valid('json')
   const ctx = await loadModelIndex(storeId, body.authorization_model_id)
-  if (!ctx) return c.json({ code: 'not_found', message: 'authorization model not found' }, 404)
+  if (!ctx) return modelNotFound(c, storeId, body.authorization_model_id)
 
   const { type: objectType, id: objectId } = (() => {
     const idx = body.tuple_key.object.indexOf(':')
@@ -156,7 +174,7 @@ evaluationRoutes.post('/stores/:storeId/expand', validate('json', ExpandBody), a
   }
 
   const store = withContextualTuples(pgTupleStore(storeId, readContext(body.consistency)), body.contextual_tuples?.tuple_keys, ctx.index)
-  validateRelation(ctx.index, objectType, body.tuple_key.relation)
+  validateTarget(ctx.index, objectType, body.tuple_key.relation)
   const root = await traced(
     'evaluator',
     'openfga.evaluator.expand',
@@ -170,7 +188,7 @@ evaluationRoutes.post('/stores/:storeId/expand', validate('json', ExpandBody), a
   )
   if (root === null) {
     return c.json({
-      code: 'invalid_argument',
+      code: 'relation_not_found',
       message: `relation "${body.tuple_key.relation}" is not defined for type "${objectType}"`,
     }, 400)
   }
@@ -194,7 +212,7 @@ evaluationRoutes.post('/stores/:storeId/batch-check', validate('json', BatchChec
     correlationIds.add(item.correlation_id)
   }
   const ctx = await loadModelIndex(storeId, body.authorization_model_id)
-  if (!ctx) return c.json({ code: 'not_found', message: 'authorization model not found' }, 404)
+  if (!ctx) return modelNotFound(c, storeId, body.authorization_model_id)
 
   const result = await traced(
     'evaluator',
@@ -227,11 +245,15 @@ evaluationRoutes.post('/stores/:storeId/batch-check', validate('json', BatchChec
           // the success/failure of each item by correlation_id. Shape
           // errors (malformed tuple_key, bad correlation_id) are caught at
           // the validation boundary before this handler runs.
-          if (!(err instanceof ConditionError)) logger.error({ err }, 'batch_check_failed')
+          if (!(err instanceof ConditionError) && !(err instanceof ResolutionLimitError)) logger.error({ err }, 'batch_check_failed')
           acc[item.correlation_id] = {
             error: err instanceof ConditionError
               ? { input_error: 'validation_error', message: err.message }
-              : { internal_error: 'internal_error', message: 'check failed' },
+              : err instanceof ResolutionLimitError
+                ? resolutionLimitStatus(err) === 400
+                  ? { input_error: err.code, message: err.message }
+                  : { internal_error: err.code, message: err.message }
+                : { internal_error: 'internal_error', message: 'check failed' },
           }
         }
       }

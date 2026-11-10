@@ -16,12 +16,14 @@
 import { SpanStatusCode, context, trace, type Attributes, type Span, type Tracer } from '@opentelemetry/api'
 import { config } from '../config'
 import type { OtelSamplerType } from '../config-schema'
+import { resolvePackageVersion } from './version'
 
 const TRACER_NAME = 'openfga-node-server'
 
 export type SpanCategory = 'http' | 'evaluator' | 'storage' | 'auth' | 'idempotency'
 
 let sdkStarted = false
+let activeSdk: { shutdown: () => Promise<void> } | undefined
 let cachedTracer: Tracer | undefined
 
 function getTracer(): Tracer {
@@ -124,8 +126,9 @@ export async function initOtelSdk(): Promise<void> {
     [semConv.ATTR_SERVICE_NAME]: otel.service.name,
     ...otel.resource.attributes,
   }
-  if (otel.service.version) {
-    attrs[semConv.ATTR_SERVICE_VERSION] = otel.service.version
+  const serviceVersion = otel.service.version || resolvePackageVersion()
+  if (serviceVersion) {
+    attrs[semConv.ATTR_SERVICE_VERSION] = serviceVersion
   }
   const resource = resourcesModule.resourceFromAttributes(attrs)
 
@@ -141,13 +144,22 @@ export async function initOtelSdk(): Promise<void> {
 
   sdk.start()
   sdkStarted = true
+  activeSdk = sdk
+}
 
-  const shutdown = (): void => {
-    sdk.shutdown().catch(() => { /* swallow — process is exiting */ })
-  }
-  process.once('SIGTERM', shutdown)
-  process.once('SIGINT', shutdown)
-  process.once('beforeExit', shutdown)
+/**
+ * Flush pending spans and shut the SDK down. Called by the process
+ * shutdown sequence in `src/server.ts`; this module deliberately
+ * installs NO signal handlers (a registered SIGTERM/SIGINT listener
+ * disables Node's default exit, so only the owner of the process
+ * lifecycle may register one). Safe to call when OTel is disabled or
+ * already shut down.
+ */
+export async function shutdownOtelSdk(): Promise<void> {
+  const sdk = activeSdk
+  activeSdk = undefined
+  sdkStarted = false
+  if (sdk) await sdk.shutdown()
 }
 
 async function buildExporter(): Promise<import('@opentelemetry/sdk-trace-base').SpanExporter> {
@@ -178,13 +190,23 @@ async function buildExporter(): Promise<import('@opentelemetry/sdk-trace-base').
         timeoutMillis: exp.timeoutMs,
       })
     }
-    case 'none': {
-      // No-op exporter for tests and verification flows: spans are
-      // built but not delivered. Use InMemorySpanExporter so the
-      // unit tests can drain it.
-      const { InMemorySpanExporter } = await import('@opentelemetry/sdk-trace-base')
-      return new InMemorySpanExporter()
-    }
+    case 'none':
+      return createNoopSpanExporter()
+  }
+}
+
+/**
+ * True no-op exporter for `exporter.type: none`: spans are sampled and
+ * built but dropped on export, so nothing is retained in memory. Tests
+ * that need to inspect spans inject their own InMemorySpanExporter.
+ */
+export function createNoopSpanExporter(): import('@opentelemetry/sdk-trace-base').SpanExporter {
+  return {
+    export(_spans, resultCallback) {
+      resultCallback({ code: 0 })
+    },
+    shutdown: () => Promise.resolve(),
+    forceFlush: () => Promise.resolve(),
   }
 }
 
@@ -238,5 +260,6 @@ export const otelContext = context
  */
 export function __resetOtelForTests(): void {
   sdkStarted = false
+  activeSdk = undefined
   cachedTracer = undefined
 }

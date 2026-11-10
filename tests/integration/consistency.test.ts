@@ -70,7 +70,7 @@ describeIfDb('request consistency', () => {
         const { post } = await setup()
         const response = await post(request.endpoint, { ...request.body, consistency })
         expect(response.status).toBe(400)
-        expect(await response.json()).toMatchObject({ code: request.endpoint === 'batch-check' ? 'validation_error' : 'invalid_argument', message: expect.any(String) })
+        expect(await response.json()).toMatchObject({ code: 'validation_error', message: expect.any(String) })
       })
 
       it.each(['MINIMIZE_LATENCY', 'HIGHER_CONSISTENCY', 'UNSPECIFIED', null, undefined])('threads %s to real storage reads', async (consistency) => {
