@@ -72,7 +72,9 @@ Currently implemented:
 - `GET /health` (auth-exempt liveness probe)
 - `GET /ready` (auth-exempt readiness probe — `200 ok` only when the
   database is reachable and the configured namespace has the expected
-  schema; `503` with a generic `reason` otherwise)
+  schema; `503` with a generic `reason` of `db_unreachable`, `schema_missing`, or
+  `schema_outdated` otherwise; details such as missing tables or pending
+  migrations appear only in logs)
 
 Model writes validate supported schema versions, type/relation references,
 rewrite structure, type restrictions, condition declarations, computed-alias

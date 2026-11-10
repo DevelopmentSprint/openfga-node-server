@@ -65,6 +65,8 @@ otel:
 
   exporter:
     # otlp-http (default) | otlp-grpc | console | none
+    # 'none' samples and builds spans but drops them on export; nothing
+    # is retained in memory.
     type: otlp-http
     # OTLP endpoint URL. Falls back to OTEL_EXPORTER_OTLP_ENDPOINT or
     # OTEL_EXPORTER_OTLP_TRACES_ENDPOINT when unset.
@@ -107,6 +109,10 @@ otel:
     idempotency: true   # Internal — claim/complete/release/replay.
 ```
 
+## Shutdown
+
+The SDK is shut down (flushing pending spans) as one step of the server's graceful shutdown on `SIGTERM` or `SIGINT`, after listeners drain and before the database pool closes. The OTel module installs no signal handlers of its own. A second signal forces an immediate exit.
+
 ## Env-Var Override Mapping
 
 Every `OPENFGA_OTEL_*` variable maps onto the nested config path. The `OTEL_*` standard variables continue to be honored by the SDK natively (we don't re-read them) and are documented here for operator convenience.
@@ -119,6 +125,8 @@ Every `OPENFGA_OTEL_*` variable maps onto the nested config path. The `OTEL_*` s
 | `OPENFGA_OTEL_EXPORTER_TYPE` | `otel.exporter.type` |
 | `OPENFGA_OTEL_EXPORTER_ENDPOINT` | `otel.exporter.endpoint` |
 | `OPENFGA_OTEL_EXPORTER_TIMEOUT_MS` | `otel.exporter.timeoutMs` |
+| `OPENFGA_OTEL_EXPORTER_HEADERS` | `otel.exporter.headers` (OTel `key=value` list) |
+| `OPENFGA_OTEL_RESOURCE_ATTRIBUTES` | `otel.resource.attributes` (OTel `key=value` list) |
 | `OPENFGA_OTEL_PROPAGATORS` | `otel.propagators` (comma-string → string[]) |
 | `OPENFGA_OTEL_SAMPLER_TYPE` | `otel.sampler.type` |
 | `OPENFGA_OTEL_SAMPLER_RATIO` | `otel.sampler.ratio` |
@@ -129,6 +137,8 @@ Every `OPENFGA_OTEL_*` variable maps onto the nested config path. The `OTEL_*` s
 | `OPENFGA_OTEL_SPANS_STORAGE` | `otel.spans.storage` |
 | `OPENFGA_OTEL_SPANS_AUTH` | `otel.spans.auth` |
 | `OPENFGA_OTEL_SPANS_IDEMPOTENCY` | `otel.spans.idempotency` |
+
+`OPENFGA_OTEL_EXPORTER_HEADERS` (`otel.exporter.headers`) and `OPENFGA_OTEL_RESOURCE_ATTRIBUTES` (`otel.resource.attributes`) are the project-specific counterparts of `OTEL_EXPORTER_OTLP_HEADERS` and `OTEL_RESOURCE_ATTRIBUTES` and use the same format: comma-separated `key=value` pairs, values percent-decoded. A malformed entry fails startup with an error that names the variable and entry position but never echoes the value (headers can carry credentials). See `docs/features/configuration.md`.
 
 Standard `OTEL_*` env vars (honored by the SDK directly): `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_SERVICE_NAME`, `OTEL_RESOURCE_ATTRIBUTES`, `OTEL_PROPAGATORS`, `OTEL_TRACES_SAMPLER`, `OTEL_TRACES_SAMPLER_ARG`. When both project-specific and standard variables target the same setting, the project-specific value wins.
 

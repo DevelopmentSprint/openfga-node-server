@@ -87,6 +87,10 @@ auth:
     # Optional — explicit JWKS URI override. Default discovery via
     # ${issuer}/.well-known/openid-configuration → jwks_uri.
     jwksUri: ''
+    # Optional — JWKS cache lifetime and the minimum gap between
+    # kid-miss refetches, in milliseconds.
+    jwksCacheMaxAgeMs: 600000
+    jwksCooldownMs: 30000
 ```
 
 ### Zod schema additions (`src/config-schema.ts`)
@@ -109,6 +113,8 @@ auth:
 | `OPENFGA_AUTH_OIDC_ALGORITHMS` | `auth.oidc.algorithms` | comma-string → string[] |
 | `OPENFGA_AUTH_OIDC_CLOCK_SKEW_SEC` | `auth.oidc.clockSkewSec` | non-negative int |
 | `OPENFGA_AUTH_OIDC_JWKS_URI` | `auth.oidc.jwksUri` | string |
+| `OPENFGA_AUTH_OIDC_JWKS_CACHE_MAX_AGE_MS` | `auth.oidc.jwksCacheMaxAgeMs` | non-negative int (default 600000) |
+| `OPENFGA_AUTH_OIDC_JWKS_COOLDOWN_MS` | `auth.oidc.jwksCooldownMs` | non-negative int (default 30000) |
 
 `src/config-env-overrides.ts` gains a new section mirroring the existing comma-string handling for `OPENFGA_AUTH_PRESHARED_KEYS` (split, trim, drop empties).
 
@@ -139,13 +145,13 @@ The non-null assertion on `authConfig.oidc` is safe because the schema's `superR
 
 Per request:
 
-1. Read `Authorization` header. Reject (`reason: 'missing_authorization'` or `'wrong_scheme'`) if missing or not `Bearer `.
+1. Read `Authorization` header. Reject (`reason: 'missing_authorization'` or `'wrong_scheme'`) if missing or not the `Bearer` scheme. The scheme name is matched case-insensitively (`Bearer`, `bearer`, `BEARER`) per RFC 7235 and may be followed by one or more spaces before the token.
 2. Extract JWT. Pass to `jose.jwtVerify(token, jwks, { issuer, audience, algorithms, clockTolerance })`.
 3. `jose.jwtVerify` validates:
-   - Signature against JWKS (`createRemoteJWKSet` auto-fetches on `kid` miss, with a 30-second cooldown to prevent abuse).
+   - Signature against JWKS (`createRemoteJWKSet` auto-fetches on `kid` miss, with a cooldown, 30 seconds by default, to prevent abuse).
    - `iss` matches `issuer` or any value in `issuerAliases` (we pass an array to `jwtVerify`'s `issuer` option).
    - `aud` contains `audience`.
-   - `exp` not before `now - clockSkewSec`.
+   - `exp` is required: a token with no `exp` claim is rejected with `reason: 'time_claim_invalid'`. A present `exp` must not be before `now - clockSkewSec`.
    - `nbf` not after `now + clockSkewSec`.
    - `alg` is in the allowed set (enforces algorithm pinning; defends against `alg=none` and HS* downgrades).
 4. If `subjects` non-empty: token `sub` claim must be in the allowlist. Otherwise 401 with `reason: 'sub_disallowed'`.
@@ -158,11 +164,17 @@ Per request:
 When `auth.mode === 'oidc'`, the factory:
 
 1. Resolves the JWKS URI: explicit `auth.oidc.jwksUri` config wins; otherwise fetch `${issuer}/.well-known/openid-configuration` once at boot and take its `jwks_uri`.
-2. Constructs a `jose.createRemoteJWKSet(new URL(jwksUri))` with `cacheMaxAge: 600_000` (10 min) and `cooldownDuration: 30_000` (30 sec).
+2. Constructs a `jose.createRemoteJWKSet(new URL(jwksUri))` with `cacheMaxAge` and `cooldownDuration` taken from `auth.oidc.jwksCacheMaxAgeMs` (default 600000, 10 min) and `auth.oidc.jwksCooldownMs` (default 30000, 30 sec).
 3. **Does not** block boot on JWKS contents — the set lazily fetches on first request.
 4. The OIDC discovery fetch uses a 5-second timeout with one retry. If both attempts fail, log FATAL with `reason: 'oidc_discovery_failed'` and exit non-zero. Matches the boot fail-fast pattern at `src/server.ts:34-39` (`requireDbUrl`).
 
+Discovery is shared and memoized: boot-time prefetch and every middleware built for the same issuer, JWKS URI, and cache settings reuse one discovery promise, so concurrent requests do not each re-run discovery. A failed discovery is not cached permanently: after a 5-second backoff the next request starts discovery again, and meanwhile requests receive a uniform 401 with `reason: 'jwks_unavailable'`. Boot-time discovery failure remains fatal.
+
 Rationale: an unreachable issuer at boot is fatal (operator misconfiguration). JWKS-fetch failures during normal operation are per-request 401s with structured logs — not a server-wide outage.
+
+## Auth Mode `none`
+
+When `auth.mode` is `none` the server accepts unauthenticated requests and logs a startup warning (`auth_disabled`) advising `preshared` or `oidc` for any non-local deployment. Idempotency records in this mode share one anonymous principal.
 
 ## Error Semantics
 
