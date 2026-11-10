@@ -13,6 +13,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { Hono } from 'hono'
 import { authMiddleware, getAuthConfig } from '../../src/middleware/auth'
+import { ANONYMOUS_PRINCIPAL, getAuthPrincipal, parseBearerToken } from '../../src/middleware/caller'
 import { reloadConfigForTests } from '../../src/config'
 
 const KEY_A = 'fixture-key-A'
@@ -47,7 +48,14 @@ function buildApp(opts: { keys?: string[]; mode?: 'none' | 'preshared' }): Hono 
   )
   app.get('/health', (c) => c.text('ok'))
   app.get('/stores/anything', (c) => c.json({ allowed: true }))
+  app.get('/stores/whoami', (c) => c.json({ principal: getAuthPrincipal(c) }))
   return app
+}
+
+async function principalOf(app: Hono, headers: Record<string, string> = {}): Promise<string> {
+  const res = await app.fetch(new Request('http://localhost/stores/whoami', { headers }))
+  expect(res.status).toBe(200)
+  return ((await res.json()) as { principal: string }).principal
 }
 
 describe('authMiddleware — none mode', () => {
@@ -168,5 +176,53 @@ describe('getAuthConfig + reloadConfigForTests', () => {
     process.env['OPENFGA_AUTH_MODE'] = 'preshared'
     process.env['OPENFGA_AUTH_PRESHARED_KEYS'] = '   '
     await expect(reloadConfigForTests()).rejects.toThrow(/at least one/)
+  })
+})
+
+describe('authMiddleware — Bearer scheme case (RFC 7235, openfga-k2a.3)', () => {
+  it.each(['bearer', 'BEARER', 'bEaReR'])('accepts the %s scheme spelling for a configured key', async (scheme) => {
+    const app = buildApp({ keys: [KEY_A] })
+    const res = await app.fetch(new Request('http://localhost/stores/anything', { headers: authHeader(scheme, KEY_A) }))
+    expect(res.status).toBe(200)
+  })
+
+  it('still rejects a lowercase scheme with an unknown key', async () => {
+    const app = buildApp({ keys: [KEY_A] })
+    const res = await app.fetch(new Request('http://localhost/stores/anything', { headers: authHeader('bearer', KEY_UNKNOWN) }))
+    expect(res.status).toBe(401)
+  })
+})
+
+describe('parseBearerToken', () => {
+  it('parses scheme case-insensitively and tolerates extra separator whitespace', () => {
+    expect(parseBearerToken('bearer   abc')).toEqual({ ok: true, token: 'abc' })
+    expect(parseBearerToken('Bearer\tabc')).toEqual({ ok: true, token: 'abc' })
+  })
+
+  it('classifies missing, empty, and foreign-scheme headers', () => {
+    expect(parseBearerToken(undefined)).toEqual({ ok: false, reason: 'missing_authorization' })
+    expect(parseBearerToken('Bearer')).toEqual({ ok: false, reason: 'missing_authorization' })
+    expect(parseBearerToken('Bearer    ')).toEqual({ ok: false, reason: 'missing_authorization' })
+    expect(parseBearerToken('Basic abc')).toEqual({ ok: false, reason: 'wrong_scheme' })
+    expect(parseBearerToken('Bearerabc')).toEqual({ ok: false, reason: 'wrong_scheme' })
+  })
+})
+
+describe('authMiddleware — caller principal (openfga-k2a.3)', () => {
+  it('records the anonymous principal in none mode', async () => {
+    const app = buildApp({ mode: 'none' })
+    expect(await principalOf(app)).toBe(ANONYMOUS_PRINCIPAL)
+  })
+
+  it('records a distinct, non-secret principal per matched preshared key', async () => {
+    const app = buildApp({ keys: [KEY_A, KEY_B] })
+    const pa = await principalOf(app, authHeader('Bearer', KEY_A))
+    const pb = await principalOf(app, authHeader('Bearer', KEY_B))
+    expect(pa).toMatch(/^preshared:[0-9a-f]{64}$/)
+    expect(pa).not.toBe(pb)
+    expect(pa).not.toContain(KEY_A)
+    // Stable across key-list order (not an index).
+    const reordered = buildApp({ keys: [KEY_B, KEY_A] })
+    expect(await principalOf(reordered, authHeader('Bearer', KEY_A))).toBe(pa)
   })
 })
