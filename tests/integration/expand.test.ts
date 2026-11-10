@@ -84,13 +84,13 @@ describeIfDb('POST /stores/:storeId/expand', () => {
     expect(json.tree.root.leaf?.users?.users).toEqual(['user:carol'])
   })
 
-  it('returns 404 when the requested authorization_model_id does not exist', async () => {
+  it('returns 400 when the requested authorization_model_id does not exist', async () => {
     const { app, storeId } = await setup()
     const res = await app.fetch(expandReq(storeId, {
       authorization_model_id: '01ZZZZZZZZZZZZZZZZZZZZZZZZ',
       tuple_key: { object: 'doc:1', relation: 'viewer' },
     }))
-    expect(res.status).toBe(404)
+    expect(res.status).toBe(400)
   })
 
   it('returns 400 when the requested relation is not defined on the type', async () => {
@@ -101,7 +101,43 @@ describeIfDb('POST /stores/:storeId/expand', () => {
     }))
     expect(res.status).toBe(400)
     const body = await res.json() as { code: string }
-    expect(body.code).toBe('validation_error')
+    expect(body.code).toBe('relation_not_found')
+  })
+
+  it.each([
+    ['expand', { tuple_key: { object: 'nope:1', relation: 'viewer' } }, 'type_not_found'],
+    ['expand', { tuple_key: { object: 'doc:1', relation: 'nope' } }, 'relation_not_found'],
+    ['list-objects', { type: 'nope', relation: 'viewer', user: 'user:alice' }, 'type_not_found'],
+    ['list-objects', { type: 'doc', relation: 'nope', user: 'user:alice' }, 'relation_not_found'],
+    ['list-users', { object: { type: 'nope', id: '1' }, relation: 'viewer', user_filters: [{ type: 'user' }] }, 'type_not_found'],
+    ['list-users', { object: { type: 'doc', id: '1' }, relation: 'nope', user_filters: [{ type: 'user' }] }, 'relation_not_found'],
+    ['list-users', { object: { type: 'doc', id: '1' }, relation: 'viewer', user_filters: [{ type: 'nope' }] }, 'type_not_found'],
+  ])('%s with undefined target returns %s', async (endpoint, extra, code) => {
+    const { app, storeId, modelId } = await setup()
+    const res = await app.fetch(new Request(`http://localhost/stores/${storeId}/${endpoint}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ authorization_model_id: modelId, ...extra }),
+    }))
+    expect(res.status).toBe(400)
+    expect(((await res.json()) as { code: string }).code).toBe(code)
+  })
+
+  it('distinguishes a pinned unknown model from a store with no model', async () => {
+    const app = buildApp()
+    const store = await createStore(`expand-nomodel-${Date.now()}-${Math.random()}`)
+    const post = (body: unknown) => app.fetch(new Request(`http://localhost/stores/${store.id}/expand`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    }))
+    const tuple_key = { object: 'doc:1', relation: 'viewer' }
+    const pinned = await post({ authorization_model_id: '01ZZZZZZZZZZZZZZZZZZZZZZZZ', tuple_key })
+    expect(pinned.status).toBe(400)
+    expect(((await pinned.json()) as { code: string }).code).toBe('authorization_model_not_found')
+    const latest = await post({ tuple_key })
+    expect(latest.status).toBe(400)
+    expect(((await latest.json()) as { code: string }).code).toBe('latest_authorization_model_not_found')
   })
 
   it('rejects type-only object filters at the route boundary (expand needs a full type:id)', async () => {

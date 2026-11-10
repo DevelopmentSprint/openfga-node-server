@@ -9,7 +9,7 @@
  *
  *   - For `target === 'json'`, pre-parses the body in a try/catch so a
  *     malformed JSON body gets the same flat
- *     `{ code: 'invalid_argument', message: 'request validation failed' }`
+ *     `{ code: 'validation_error', message: 'request validation failed' }`
  *     envelope as a schema-rejection.
  *   - For all targets, maps schema-validation failures into the same
  *     envelope via the validator hook.
@@ -25,13 +25,23 @@ import type { Context, Next, ValidationTargets } from 'hono'
 type Target = keyof ValidationTargets
 
 const INVALID_ARGUMENT = {
-  code: 'invalid_argument',
+  code: 'validation_error',
   message: 'request validation failed',
 } as const
 
-export function validate<T extends Target, S extends ZodType>(target: T, schema: S) {
+interface ValidationOptions {
+  code?: 'invalid_argument' | 'validation_error'
+  /** Use explicit schema diagnostics for endpoints whose upstream contract defines them. */
+  schemaMessage?: boolean
+}
+
+export function validate<T extends Target, S extends ZodType>(target: T, schema: S, options: ValidationOptions = {}) {
+  const envelope = { ...INVALID_ARGUMENT, code: options.code ?? INVALID_ARGUMENT.code }
   const schemaValidator = zValidator(target, schema, (result, c) => {
-    if (!result.success) return c.json(INVALID_ARGUMENT, 400)
+    if (!result.success) return c.json({
+      ...envelope,
+      message: options.schemaMessage ? result.error.issues[0]?.message ?? envelope.message : envelope.message,
+    }, 400)
   })
 
   if (target !== 'json') return schemaValidator
@@ -44,7 +54,7 @@ export function validate<T extends Target, S extends ZodType>(target: T, schema:
       await c.req.json()
     }
     catch {
-      return c.json(INVALID_ARGUMENT, 400)
+      return c.json(envelope, 400)
     }
     return schemaValidator(c, next)
   }

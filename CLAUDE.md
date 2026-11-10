@@ -239,7 +239,6 @@ On non-trivial work, consult CASS context at start (`cm context`) and record lea
 
 Use `bd` for task tracking. For repo-specific Beads workflow and parent/child bead rules, read `@docs/policies/beads-protected-branches.md`. For branch, worktree, and integration rules, read `@docs/policies/branches-worktrees.md`. For current CLI guidance, run `bd prime`.
 
-
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:ca08a54f -->
 ## Beads Issue Tracker
 

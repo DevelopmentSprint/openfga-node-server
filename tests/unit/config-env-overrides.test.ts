@@ -244,3 +244,10 @@ describe('applyEnvOverrides + ConfigSchema — round-trip', () => {
     expect(ConfigSchema.safeParse(merged).success).toBe(false)
   })
 })
+
+
+it('configures the BatchCheck limit through file and upstream environment names', () => {
+  expect(ConfigSchema.parse(applyEnvOverrides({ maxChecksPerBatchCheck: 100 }, {})).maxChecksPerBatchCheck).toBe(100)
+  expect(ConfigSchema.parse(applyEnvOverrides({ maxChecksPerBatchCheck: 100 }, { OPENFGA_MAX_CHECKS_PER_BATCH_CHECK: '2' })).maxChecksPerBatchCheck).toBe(2)
+  expect(ConfigSchema.parse(applyEnvOverrides({}, { OPENFGA_MAX_CHECKS_PER_BATCH_CHECK: '' })).maxChecksPerBatchCheck).toBe(50)
+})

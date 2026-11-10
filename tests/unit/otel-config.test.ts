@@ -146,3 +146,42 @@ describe('applyEnvOverrides — OTel mapping', () => {
     expect(getter(r)).toEqual(['a', 'b', 'c'])
   })
 })
+
+describe('applyEnvOverrides — OTel map-valued env vars', () => {
+  type MapOut = { otel?: { exporter?: { headers?: unknown }, resource?: { attributes?: unknown } } }
+  const run = (env: Record<string, string | undefined>) => applyEnvOverrides({}, env) as MapOut
+
+  it('parses OTel-standard key=value lists for exporter headers', () => {
+    const out = run({ OPENFGA_OTEL_EXPORTER_HEADERS: ' x-api-key = abc%20def , authorization=Bearer%20tok%3Dx==,, ' })
+    expect(out.otel?.exporter?.headers).toEqual({ 'x-api-key': 'abc def', authorization: 'Bearer tok=x==' })
+  })
+
+  it('parses resource attributes and lets file values be overridden', () => {
+    const out = applyEnvOverrides(
+      { otel: { resource: { attributes: { stale: '1' } } } },
+      { OPENFGA_OTEL_RESOURCE_ATTRIBUTES: 'deployment.environment=prod,service.namespace=a%2Fb' },
+    ) as MapOut
+    expect(out.otel?.resource?.attributes).toEqual({ 'deployment.environment': 'prod', 'service.namespace': 'a/b' })
+  })
+
+  it('treats empty and unset values as not set', () => {
+    expect(run({ OPENFGA_OTEL_EXPORTER_HEADERS: '  ' }).otel).toBeUndefined()
+    expect(run({}).otel).toBeUndefined()
+  })
+
+  it('accepts a list of only empty entries as an empty map', () => {
+    expect(run({ OPENFGA_OTEL_EXPORTER_HEADERS: ' , ,' }).otel?.exporter?.headers).toEqual({})
+  })
+
+  it('rejects an entry without "=" naming the variable but not the value', () => {
+    expect(() => run({ OPENFGA_OTEL_EXPORTER_HEADERS: 'ok=1,SECRETTOKEN' }))
+      .toThrowError(/OPENFGA_OTEL_EXPORTER_HEADERS: entry 2/)
+    try { run({ OPENFGA_OTEL_EXPORTER_HEADERS: 'ok=1,SECRETTOKEN' }) }
+    catch (err) { expect((err as Error).message).not.toContain('SECRETTOKEN') }
+  })
+
+  it('rejects an empty key and bad percent-encoding', () => {
+    expect(() => run({ OPENFGA_OTEL_RESOURCE_ATTRIBUTES: '=v' })).toThrowError(/OPENFGA_OTEL_RESOURCE_ATTRIBUTES: entry 1/)
+    expect(() => run({ OPENFGA_OTEL_RESOURCE_ATTRIBUTES: 'k=%E0%A4%A' })).toThrowError(/percent-encoded/)
+  })
+})

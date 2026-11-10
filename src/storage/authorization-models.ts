@@ -2,7 +2,8 @@
  * Repository for `openfga.authorization_model` rows.
  *
  * Per OpenFGA semantics, models are immutable once written. The latest
- * model is the active one unless a caller explicitly pins a previous
+ * model (highest DB-assigned `seq`, not the ULID id, which can sort wrong
+ * across replicas with clock skew; openfga-k2a.16) is the active one unless a caller explicitly pins a previous
  * `authorization_model_id` on a check or write request.
  *
  * Routes through Kysely via `getDb()` (openfga-n0m). The `model`
@@ -38,7 +39,7 @@ export interface AuthorizationModelRow {
 // by a SELECT" view of the table — `Generated<T>` columns become `T`,
 // `JSONColumnType<T>` becomes the parsed `T`. Reusing this type keeps
 // the parsed-model shape declared exactly once (in db-schema.ts).
-type RawRow = Selectable<AuthorizationModelTable>
+type RawRow = Omit<Selectable<AuthorizationModelTable>, 'seq'>
 
 function rowToModel(raw: RawRow): AuthorizationModelRow {
   return {
@@ -94,7 +95,7 @@ export async function getAuthorizationModel(
 /** Resolve latest without transferring or decoding the immutable model payload. */
 export async function getLatestAuthorizationModelId(storeId: string): Promise<string | null> {
   const row = await getDb().selectFrom('authorization_model')
-    .select('id').where('store_id', '=', storeId).orderBy('id', 'desc')
+    .select('id').where('store_id', '=', storeId).orderBy('seq', 'desc')
     .limit(1).executeTakeFirst()
   return row?.id ?? null
 }
@@ -106,7 +107,7 @@ export async function getLatestAuthorizationModel(
     .selectFrom('authorization_model')
     .select(MODEL_COLUMNS)
     .where('store_id', '=', storeId)
-    .orderBy('id', 'desc')
+    .orderBy('seq', 'desc')
     .limit(1)
     .executeTakeFirst()
   return row ? rowToModel(row) : null
@@ -120,17 +121,27 @@ export async function listAuthorizationModels(
     .selectFrom('authorization_model')
     .select(MODEL_COLUMNS)
     .where('store_id', '=', storeId)
-    .orderBy('id', 'desc')
+    .orderBy('seq', 'desc')
     .limit(pageSize)
     .execute()
   return rows.map(rowToModel)
 }
 
-/** ULID ordering matches the upstream immutable-model pagination contract. */
+/**
+ * Newest-first listing ordered by the write-order `seq` (same key as the
+ * latest-model lookup, so the first listed model is always the latest).
+ * The continuation cursor still carries the model id; it is resolved to
+ * its `seq` inside the query, so existing tokens stay valid.
+ */
 export async function listAuthorizationModelsPage(storeId: string, pageSize: number, after?: string) {
   let query = getDb().selectFrom('authorization_model').select(MODEL_COLUMNS)
-    .where('store_id', '=', storeId).orderBy('id', 'desc').limit(pageSize + 1)
-  if (after) query = query.where('id', '<', after)
+    .where('store_id', '=', storeId).orderBy('seq', 'desc').limit(pageSize + 1)
+  if (after) {
+    const cursor = await getDb().selectFrom('authorization_model').select('seq')
+      .where('store_id', '=', storeId).where('id', '=', after).executeTakeFirst()
+    if (!cursor) return { rows: [], next: null }
+    query = query.where('seq', '<', cursor.seq)
+  }
   const rows = await query.execute()
   const page = rows.slice(0, pageSize)
   return { rows: page.map(rowToModel), next: rows.length > pageSize ? page.at(-1)!.id : null }

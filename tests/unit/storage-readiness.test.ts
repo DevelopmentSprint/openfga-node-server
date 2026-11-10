@@ -18,6 +18,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { sql } from 'kysely'
 import { getDb, resetDb } from '../../src/storage/db'
+import { MIGRATIONS } from '../../src/cli/migrations-bundle'
 import { checkReadiness } from '../../src/storage/readiness'
 import { migrateToLatest } from '../_helpers/sqlite-bootstrap'
 import { reloadConfigForTests } from '../../src/config'
@@ -70,6 +71,16 @@ describe('checkReadiness (SQLite)', () => {
     expect(result).toEqual({ ok: true })
   })
 
+  it('reports schema_outdated when a bundled migration is not recorded', async () => {
+    await migrateToLatest()
+    const latest = Object.keys(MIGRATIONS).sort().at(-1)!
+    await sql`delete from openfga_kysely_migration where name = ${latest}`.execute(getDb())
+    const result = await checkReadiness()
+    expect(result.ok).toBe(false)
+    expect(result.reason).toBe('schema_outdated')
+    expect(result.pending).toEqual([latest])
+  })
+
   it('honours a non-default OPENFGA_DB_NAMESPACE (looks for prefixed names)', async () => {
     process.env['OPENFGA_DB_NAMESPACE'] = 'app_authz'
     await reloadConfigForTests()
@@ -77,6 +88,14 @@ describe('checkReadiness (SQLite)', () => {
     await migrateToLatest()
     const result = await checkReadiness()
     expect(result).toEqual({ ok: true })
+  })
+
+  it('works under a namespace that is a prefix of a logical table name', async () => {
+    process.env['OPENFGA_DB_NAMESPACE'] = 'tuple'
+    await reloadConfigForTests()
+    await resetDb()
+    await migrateToLatest()
+    expect(await checkReadiness()).toEqual({ ok: true })
   })
 
   it('reports db_unreachable when the database file cannot be opened', async () => {

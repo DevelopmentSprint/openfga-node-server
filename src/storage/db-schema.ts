@@ -39,6 +39,12 @@ export interface AuthorizationModelTable {
     conditions?: { [k: string]: Condition }
   }>
   created_at: Generated<string>
+  // Monotonic write-order sequence (migration 1794400100000, openfga-k2a.16).
+  // Assigned by the database (identity sequence on Postgres, trigger on
+  // SQLite); never supplied by the application. Used to pick the latest
+  // model independent of ULID/clock skew. bigint comes back as a string on
+  // Postgres and a number on SQLite, so it is only used in ORDER BY.
+  seq: Generated<string | number>
 }
 
 export interface TupleTable {
@@ -75,7 +81,10 @@ export interface IdempotencyKeyTable {
   key: string
   request_hash: string
   status: 'in_flight' | 'completed'
+  // Real HTTP status of a completed response; NULL while in flight.
   response_status: ColumnType<number | null, number | null | undefined, number | null>
+  // In-flight claim token (openfga-k2a.14); NULL once completed.
+  claim_token: ColumnType<string | null, string | null | undefined, string | null>
   // ColumnType (not JSONColumnType) is deliberate here. Idempotency
   // response payloads are heterogeneous (any successful endpoint's
   // response shape), so the select type stays `unknown` for callers

@@ -111,7 +111,8 @@ Each row below names a Postgres-specific construct currently in the storage laye
 - **SQLite**: better-sqlite3 returns columns by their declared affinity. Storing timestamps as ISO-8601 text (`TEXT`) preserves arbitrary precision _at the storage level_, but SQLite's `'now'` clock itself is millisecond-resolution — `STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now')` yields three decimals regardless of the `subsec` modifier (tested SQLite 3.53). Same-millisecond inserts therefore share a `created_at` value. The Kysely `ColumnType` mapping returns `string` for both engines.
 - **Abstraction**: declare timestamp columns as `string` in the `Database` type. Postgres-side: keep the `setTypeParser` override at driver-construction time. SQLite-side: store timestamps as ISO-8601 text via `STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now')` defaults. Cursor comparisons work identically in both engines because both compare ISO-8601 strings lexicographically when the format is fixed-width. Same-millisecond ordering ties on SQLite are resolved at the next layer:
   - For `tuple_change`, the `seq` column (bigserial on Postgres, `rowid`-trigger on SQLite — see `migrations/1778083200000_tuple-change-seq.ts`) provides a strictly monotonic per-insert tiebreaker that the changes query orders by alongside `inserted_at`.
-  - For `store` and `authorization_model`, the application-side ULID generator in `src/storage/ids.ts` is monotonic-within-millisecond (`openfga-sp5`): same-ms calls increment the random suffix instead of regenerating it, so `ORDER BY id DESC` produces insertion-order results without a schema-level seq column.
+  - For `store`, the application-side ULID generator in `src/storage/ids.ts` is monotonic-within-millisecond (`openfga-sp5`): same-ms calls increment the random suffix instead of regenerating it, so `ORDER BY id DESC` produces insertion-order results without a schema-level seq column.
+  - For `authorization_model`, ULID monotonicity only holds inside one process, so replicas with clock skew could make a later write sort earlier. The table therefore carries a database-assigned `seq` column (migration `1794400100000_authorization-model-seq.ts`): a dedicated owned sequence on Postgres, an AFTER INSERT trigger assigning `max(seq)+1` on SQLite. The latest model of a store is the row with the highest `seq`, not the highest ULID, and `ReadAuthorizationModels` lists newest first by `seq`. Existing rows are backfilled in ULID order, so current deployments keep the same latest model. Continuation tokens still carry the model id (resolved to its `seq` in the query), so the wire format and existing tokens are unchanged. On Postgres a sequence value is taken at INSERT rather than commit, so two concurrent uncommitted writers may commit in the opposite order of their `seq` values; that is the accepted granularity.
 
 ### Clock-skew-safe idempotency claim
 
@@ -119,6 +120,10 @@ Each row below names a Postgres-specific construct currently in the storage laye
 - **SQLite**: `STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now', '-' || $ || ' milliseconds')` produces an equivalent cutoff using SQLite's modifier syntax.
 - **Boundary semantics**: the comparison is `<=` (and the lookup mirror is `>`) rather than `<` / `>=`, so a `ttlMs=0` sweep clears every existing row even on dialects whose cutoff and `created_at` resolve to the same millisecond instant. Postgres microsecond `now()` effectively never lands on the equality boundary in practice, so this is a no-op there; SQLite millisecond `now()` does land on the boundary, and `<` would silently leave the row in place (`openfga-sp5`).
 - **Abstraction**: a thin `dialectNowMinus(ms: number)` helper in `src/storage/dialect.ts` returns a Kysely `RawBuilder<string>` rendering the engine-appropriate expression. The idempotency module imports the helper rather than embedding SQL.
+
+### Concurrent tuple writes (Postgres)
+
+Each tuple write transaction runs at `READ COMMITTED` and takes a transaction-scoped per-store advisory lock (`pg_advisory_xact_lock`, keyed by namespace and store ID) before anything else, so mutation transactions of one store are serialized. Changelog rows are stamped after the lock is held with `greatest(clock_timestamp(), max(inserted_at of the store) + 1 microsecond)`, which makes `inserted_at` strictly greater than every previously committed changelog row of that store. A writer therefore cannot commit a row behind a `ReadChanges` poller's cursor, which keeps polling-tail reads gap-free and in cursor order. The transaction also re-verifies the store is live while holding a share lock on its row, so a concurrent store deletion either waits or surfaces as store-not-found. Tuple mutations are applied in a deterministic key order to avoid deadlocks, while errors and changelog rows follow request order. Deadlocks (`40P01`) and serialization failures (`40001`) are retried a bounded number of times. SQLite behavior is unchanged: its single writer already serializes transactions.
 
 ### UPSERT and RETURNING
 
@@ -135,6 +140,7 @@ Each row below names a Postgres-specific construct currently in the storage laye
   - **(a) Table prefix**: `openfga_store`, `openfga_authorization_model`, etc. — the abstraction layer maps the logical table name `store` to the physical name `openfga.store` (Postgres) or `openfga_store` (SQLite).
   - **(b) ATTACH DATABASE**: `ATTACH DATABASE ':memory:' AS openfga` lets queries reference `openfga.store` literally.
 - **Decision**: **(a) table prefix**. ATTACH semantics differ across SQLite environments (in particular, the prefix-as-database-name only persists for the connection lifetime, which conflicts with the Migrator's per-step connection reuse). The Kysely `Database` type uses unprefixed logical names (`store`, `tuple`, `authorization_model`, etc.); the dialect adapter prepends `<namespace>.` for Postgres and `<namespace>_` for SQLite at query construction time, where `<namespace>` is the value of `OPENFGA_DB_NAMESPACE` (default `openfga`). See §Namespace.
+- On SQLite the prefix is applied by a Kysely plugin (`src/storage/table-prefix-plugin.ts`) that prepends the namespace to every logical table name at query-compile time. It skips the Migrator's already-physical tracking-table names (exact match), identifiers that carry an explicit schema, the virtual `excluded` row, and foreign-key `references()` targets, which migrations already write as physical names. On Postgres the namespace is applied with `withSchema`.
 - RLS is Postgres-only and remains in the Postgres migration. SQLite has no equivalent; the unit-test path runs in-process so the boundary is the test process, not a database role.
 
 ### JSON storage
@@ -166,7 +172,26 @@ The `pnpm migrate up` and `pnpm migrate down` scripts call into the new runner. 
 
 The Migrator is constructed with the `OPENFGA_DB_NAMESPACE` value (default `openfga`) so its tracking tables (`kysely_migration` and `kysely_migration_lock`) live under the same namespace as the OpenFGA tables — `<namespace>.kysely_migration` on Postgres, `<namespace>_kysely_migration` on SQLite. This keeps `pg_dump --schema=<namespace> --exclude-table=...` recipes self-contained and prevents the Migrator from polluting the operator's `public` schema (or the SQLite database's top-level table namespace).
 
+Migrations added since the initial schema, all forward-only and namespace-aware:
+
+- `1794300100000_read-and-model-indexes.ts`: an index matching the paginated `/read` order on `tuple`, and a `(store_id, id desc)` index on `authorization_model`.
+- `1794400000000_idempotency-claim-token.ts`: a nullable `claim_token text` column on `idempotency_keys`, so the in-flight claim token no longer shares `response_status` with the HTTP status.
+- `1794400100000_authorization-model-seq.ts`: the `seq` column, its Postgres sequence or SQLite trigger, and a `(store_id, seq desc)` index serving the latest-model lookup and newest-first listing.
+
+SQLite index names share one global namespace per database file, so migrations from `1794300100000` onward prefix SQLite index names with the namespace. Postgres indexes live in the namespace schema and need no prefix.
+
 NodeFGA does not mirror upstream physical schemas. The PRD now requires a tested conversion or API export/import workflow; a direct dump/restore is unsupported.
+
+## Known Limitations
+
+Deployed migrations are immutable: changing an already-released migration would break any installation that has applied it, so fixes roll forward in new migrations only (owner decision). The following defects in released migrations are therefore recorded rather than corrected:
+
+- **Unsafe `down()` in `1793012400000_tuple-conditions.ts`.** It drops the `condition_name` and `condition_context` columns from `tuple` and `tuple_change`, discarding all stored condition data. Do not run `pnpm migrate down` past this migration on a database that holds conditional tuples.
+- **Unsafe `down()` in `1777680000000_initial-openfga-schema.ts`.** On Postgres it runs `DROP SCHEMA ... CASCADE` on the namespace schema, removing every object in it, including tables created by later migrations and any other objects an operator placed there. Rolling back the initial schema is effectively a full reset.
+- **SQLite index names are not namespaced in the earliest migrations.** Indexes created with `createIndex` in the initial schema, idempotency-keys, tuple-changes and tuple-change-seq migrations use fixed names, and SQLite index names are global per database file. Two namespaces cannot share one SQLite file; use one file per namespace. (Postgres is unaffected because indexes live in the namespace schema.)
+- **`tuple_change.seq` backfill follows physical row order.** The tuple-change-seq migration numbers pre-existing changelog rows by physical (rowid or heap) order, not by `inserted_at`, so on a database with history that was written out of physical order the backfilled `seq` may not reflect original change order. New rows are unaffected.
+
+New migrations must provide a safe `down()` and, on SQLite, namespaced index names.
 
 ## CI / Test Strategy
 

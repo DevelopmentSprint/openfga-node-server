@@ -11,7 +11,7 @@
  */
 import { sql } from 'kysely'
 import { getDb, getDialect } from './db'
-import { dialectTimestampParam } from './dialect'
+import { dialectNow, dialectTimestampParam } from './dialect'
 import { generateId } from './ids'
 
 export interface StoreRow {
@@ -117,6 +117,6 @@ export async function listStoresPage(
 /** Soft deletion keeps authorization history while hiding all store-scoped APIs. */
 export async function deleteStore(id: string): Promise<void> {
   await getDb().updateTable('store')
-    .set({ deleted_at: new Date().toISOString() })
+    .set({ deleted_at: dialectNow(getDialect()) })
     .where('id', '=', id).where('deleted_at', 'is', null).execute()
 }

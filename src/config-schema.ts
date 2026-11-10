@@ -92,6 +92,19 @@ function positiveInt(fieldName: string, defaultValue: number) {
     })
 }
 
+/**
+ * TCP port parser: a non-negative-integer parse (same coercion and
+ * messages as the other numeric fields) followed by a 1..65535 range
+ * check. Port 0 (ephemeral) is rejected: the server logs and
+ * documents a concrete listening port.
+ */
+function port(fieldName: string, defaultValue: number) {
+  return nonNegativeInt(fieldName, defaultValue).refine(
+    v => v >= 1 && v <= 65_535,
+    { message: `${fieldName} must be an integer between 1 and 65535` },
+  )
+}
+
 export const LogLevels = ['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'silent'] as const
 export type LogLevel = (typeof LogLevels)[number]
 
@@ -153,6 +166,10 @@ const PoolSchema = z
     statementTimeoutMs: nonNegativeInt('db.pool.statementTimeoutMs', 0),
     queryTimeoutMs: nonNegativeInt('db.pool.queryTimeoutMs', 0),
   })
+  .refine(pool => pool.min <= pool.max, {
+    path: ['min'],
+    message: 'db.pool.min must be less than or equal to db.pool.max',
+  })
   .prefault({} as never)
 
 const DbSchema = z
@@ -178,12 +195,12 @@ const ListenersSchema = z
     http: z
       .object({
         enabled: strictBool('listeners.http.enabled').default(true),
-        port: nonNegativeInt('listeners.http.port', 8080),
+        port: port('listeners.http.port', 8080),
       })
       .prefault({} as never),
     https: z
       .object({
-        port: nonNegativeInt('listeners.https.port', 8443),
+        port: port('listeners.https.port', 8443),
       })
       .prefault({} as never),
   })
@@ -291,6 +308,9 @@ const OtelSchema = z
     service: z
       .object({
         name: z.string().min(1).default('openfga-node-server'),
+        // Empty means "unset": the OTel bootstrap resolves the
+        // package.json version at runtime (see
+        // src/observability/version.ts).
         version: z.string().default(''),
       })
       .prefault({} as never),
@@ -320,6 +340,7 @@ export const ConfigSchema = z
     loadModel: LoadModelSchema,
     otel: OtelSchema,
     migrateOnStart: strictBool('migrateOnStart').default(false),
+    maxChecksPerBatchCheck: positiveInt('maxChecksPerBatchCheck', 50).refine(n => n <= 0xffff_ffff, 'maxChecksPerBatchCheck must fit uint32'),
   })
   .superRefine((cfg, ctx) => {
     const httpEnabled = cfg.listeners.http.enabled

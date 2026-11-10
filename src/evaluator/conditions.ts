@@ -189,13 +189,20 @@ export class Conditions {
     const compiled = this.compiled.get(condition.name)
     if (!compiled) throw new ConditionError(`condition '${condition.name}' is not defined`)
     try {
-      const merged = { ...context, ...condition.context }
-      const size = inputSize(merged)
+      // Only declared parameters reach the expression, so only they count
+      // toward the budget. Tuple context takes precedence over request context.
+      const parameters = Object.entries(compiled.definition.parameters ?? {})
+      const inputs: Record<string, unknown> = Object.create(null)
+      for (const [name] of parameters) {
+        if (condition.context && Object.hasOwn(condition.context, name)) inputs[name] = (condition.context as Record<string, unknown>)[name]
+        else if (Object.hasOwn(context, name)) inputs[name] = context[name]
+      }
+      const size = inputSize(inputs)
       if (size > 100000 || compiled.nodes * Math.max(2, size, compiled.nodes) ** Math.max(1, compiled.loops) > 1000000) throw new Error('condition evaluation budget exceeded')
       const bindings: Record<string, CelInput> = Object.create(null)
-      for (const [name, ref] of Object.entries(compiled.definition.parameters ?? {})) {
-        if (!Object.hasOwn(merged, name)) throw new Error(`missing context parameter '${name}'`)
-        bindings[name] = convert(merged[name], ref)
+      for (const [name, ref] of parameters) {
+        if (!Object.hasOwn(inputs, name)) throw new Error(`missing context parameter '${name}'`)
+        bindings[name] = convert(inputs[name], ref)
       }
       const result = compiled.evaluate(bindings)
       if (isCelError(result)) throw result

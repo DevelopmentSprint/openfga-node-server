@@ -85,7 +85,7 @@ describe('write route', () => {
 
     expect(res.status).toBe(400)
     expect(await res.json()).toEqual({
-      code: 'invalid_argument',
+      code: 'validation_error',
       message: 'relation "editor" is not defined for type "doc"',
     })
     expect(loadModelIndex).toHaveBeenCalledWith('store-1', '01M5X4VSFEV23X0B26DAJ26CW2')
@@ -103,8 +103,8 @@ describe('write route', () => {
       },
     }))
 
-    expect(res.status).toBe(404)
-    expect(await res.json()).toEqual({ code: 'not_found', message: 'authorization model not found' })
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ code: 'authorization_model_not_found', message: expect.stringContaining('not found') })
     expect(applyTupleMutations).not.toHaveBeenCalled()
   })
 
@@ -120,10 +120,10 @@ describe('write route', () => {
     expect(res.status).toBe(400)
     // The Zod validator rejects malformed object refs at the request
     // boundary before storage. The exact error text is implementation
-    // detail; the public contract is the OpenFGA invalid_argument
+    // detail; the public contract is the OpenFGA validation_error
     // envelope plus the guarantee that storage was not invoked.
     const body = await res.json() as { code: string }
-    expect(body.code).toBe('invalid_argument')
+    expect(body.code).toBe('validation_error')
     expect(applyTupleMutations).not.toHaveBeenCalled()
   })
 

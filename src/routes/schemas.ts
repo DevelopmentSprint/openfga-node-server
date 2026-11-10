@@ -123,6 +123,12 @@ export const ListStoresQuery = z.object({
   continuation_token: z.string().optional(),
 }).passthrough()
 
+/** Path params for GET /stores/:storeId/authorization-models/:id. */
+export const ModelIdParam = z.object({
+  storeId: z.string(),
+  id: z.string().regex(/^[0-9A-HJKMNP-TV-Z]{26}$/),
+})
+
 export const ModelListQuery = z.object({
   page_size: z.coerce.number().int().min(1).max(100).optional(),
   continuation_token: z.string().optional(),
@@ -131,7 +137,9 @@ export const ModelListQuery = z.object({
 // ─── POST /stores ─────────────────────────────────────────────────
 
 export const CreateStoreBody = z.object({
-  name: z.string().trim().min(1),
+  // Upstream OpenFGA bounds store names to 3..64 characters; only the
+  // upper bound is enforced here (existing 1-char names stay valid).
+  name: z.string().trim().min(1).max(64),
 }).passthrough()
 
 // ─── POST /stores/:storeId/authorization-models ───────────────────
@@ -190,7 +198,7 @@ export const ReadBody = z.object({
   // Reject 0: a page of zero rows is meaningless on the wire and
   // would otherwise reach readTuplesPage's slice logic which assumes
   // page.length >= 1 when rows exist. See openfga-5uv review.
-  page_size: z.number().int().positive().optional(),
+  page_size: z.number().int().min(1).max(100).optional(),
   continuation_token: z.string().optional(),
 }).passthrough()
 
@@ -261,8 +269,8 @@ export const ExpandBody = z.object({
 
 // ─── POST /stores/:storeId/batch-check ────────────────────────────
 
-const CORRELATION_ID = z.string().regex(/^[A-Za-z0-9-]{1,36}$/, {
-  message: 'correlation_id must contain only letters, numbers, or hyphens and be ≤ 36 characters',
+const CORRELATION_ID = z.string().refine(value => value.length >= 1 && value.length <= 36 && !/[^A-Za-z0-9_-]/.test(value), {
+  message: 'invalid BatchCheckItem.CorrelationId: value does not match regex pattern "^[\\\\w\\\\d-]{1,36}$"',
 })
 
 const BatchCheckItem = z.object({
@@ -277,26 +285,13 @@ const BatchCheckItem = z.object({
   correlation_id: CORRELATION_ID,
 }).passthrough()
 
-export const BATCH_CHECK_MAX_ITEMS = 50
-
 export const BatchCheckBody = z
   .object({
     consistency: CONSISTENCY,
-    checks: z.array(BatchCheckItem).min(1).max(BATCH_CHECK_MAX_ITEMS),
+    checks: z.array(BatchCheckItem).min(1, 'invalid BatchCheckRequest.Checks: value must contain at least 1 item(s)'),
     authorization_model_id: MODEL_ID.optional(),
   })
   .passthrough()
-  .refine(
-    (b) => {
-      const seen = new Set<string>()
-      for (const c of b.checks) {
-        if (seen.has(c.correlation_id)) return false
-        seen.add(c.correlation_id)
-      }
-      return true
-    },
-    { message: 'correlation_id values must be unique within a batch' },
-  )
 
 // ─── POST /stores/:storeId/list-objects ───────────────────────────
 

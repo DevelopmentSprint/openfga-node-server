@@ -31,6 +31,10 @@ condition comparisons against the running reference are recorded below.
 - Apply the same validation to contextual tuples. Contextual tuple precedence
   must match upstream when a persisted tuple has the same identity; condition-aware
   overlays replace matching persisted edges rather than unioning their payloads.
+  When a request repeats the same contextual tuple key (object, relation, user),
+  the first occurrence wins and later duplicates are ignored regardless of their
+  condition, matching upstream. This applies to check, batch-check, list-objects,
+  list-users, and expand.
 - Merge request context with tuple context, with tuple values taking
   precedence. Keep request context isolated between requests and batch items.
 - Support upstream standard condition parameter types, including numeric,

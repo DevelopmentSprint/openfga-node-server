@@ -15,7 +15,7 @@ Proposed.
 
 The server is configured today via 16+ flat `OPENFGA_*` environment variables enumerated in `.env.example`, read by direct `process.env['OPENFGA_*']` access at scattered sites: `src/server.ts`, `src/logger.ts`, `src/middleware/auth.ts`, `src/middleware/idempotency.ts`, `src/cli/load-model.ts`, `src/storage/db.ts`, `src/storage/migrate-on-start.ts`, `src/storage/pg-internals.ts`. The flat shape forces long underscore-snake-cased names (`OPENFGA_DB_POOL_IDLE_TIMEOUT_MS`), supports no nesting or grouping, has no per-environment switching short of external orchestration, and reimplements parsing logic (boolean strings, non-negative integers) at multiple call sites.
 
-Adopt c12 as the canonical loader and Zod as the canonical schema. Configuration moves to a single hierarchical file (`openfga.config.{yaml,yml,toml,...}`) with per-environment override blocks. Existing `OPENFGA_*` env vars remain valid as a flat override layer for platform-managed deployment patterns (Vercel env vars, Kubernetes secrets, twelve-factor expectations). All direct `process.env` reads in `src/` are replaced with imports from a single typed `src/config.ts`.
+Adopt c12 as the canonical loader and Zod as the canonical schema. Configuration moves to a single hierarchical file (`openfga.config.{yaml,yml,toml,...}`) with per-environment override blocks. Existing `OPENFGA_*` env vars remain valid as a flat override layer for platform-managed deployment patterns (platform-injected environment variables, Kubernetes secrets, twelve-factor expectations). All direct `process.env` reads in `src/` are replaced with imports from a single typed `src/config.ts`.
 
 ## Goals
 
@@ -124,6 +124,8 @@ Constraints encoded in the Zod schema:
 - `tls.certFile` and `tls.keyFile` are both optional and must either both be set or both be unset. When both are set, the HTTPS listener is enabled. When `listeners.http.enabled = false`, both must be set or the schema rejects (matches the fatal misconfiguration check at `src/server.ts:73-77`).
 - `auth.presharedKeys` must contain at least one non-empty entry when `auth.mode = preshared` (matches `src/middleware/auth.ts:60-63`).
 - `listeners.http.port` and `listeners.https.port` must differ when both listeners are active (matches `src/server.ts:80-86`).
+- `listeners.http.port` and `listeners.https.port` must each be an integer from 1 through 65535; port 0 is rejected.
+- `db.pool.min` must be less than or equal to `db.pool.max`.
 - `log.level` is one of `trace|debug|info|warn|error|fatal|silent`.
 
 Cross-field constraints are enforced via Zod `superRefine` on the root schema so they fire alongside individual field validation in a single error tree.
@@ -144,19 +146,27 @@ Each existing `OPENFGA_*` env var maps to a nested config path. After c12 loads 
 | `OPENFGA_DB_STATEMENT_TIMEOUT_MS` | `db.pool.statementTimeoutMs` | non-negative int |
 | `OPENFGA_DB_QUERY_TIMEOUT_MS` | `db.pool.queryTimeoutMs` | non-negative int |
 | `OPENFGA_HTTP_ENABLED` | `listeners.http.enabled` | strict-bool (`true`\|`false`, case- and whitespace-tolerant) |
-| `OPENFGA_HTTP_PORT` | `listeners.http.port` | non-negative int |
-| `OPENFGA_HTTPS_PORT` | `listeners.https.port` | non-negative int |
+| `OPENFGA_HTTP_PORT` | `listeners.http.port` | int 1..65535 |
+| `OPENFGA_HTTPS_PORT` | `listeners.https.port` | int 1..65535 |
 | `OPENFGA_TLS_CERT_FILE` | `tls.certFile` | string |
 | `OPENFGA_TLS_KEY_FILE` | `tls.keyFile` | string |
 | `OPENFGA_MIGRATE_ON_START` | `migrateOnStart` | strict-bool |
-| `OPENFGA_AUTH_MODE` | `auth.mode` | enum `none\|preshared` |
+| `OPENFGA_AUTH_MODE` | `auth.mode` | enum `none\|preshared\|oidc` |
 | `OPENFGA_AUTH_PRESHARED_KEYS` | `auth.presharedKeys` | comma-string → string[] (drops empty entries) |
 | `OPENFGA_IDEMPOTENCY_MODE` | `idempotency.mode` | enum `off\|optional\|required` |
 | `OPENFGA_IDEMPOTENCY_TTL_MS` | `idempotency.ttlMs` | **positive** int (matches current parser at `src/middleware/idempotency.ts:82-87`; `0` and negatives are fatal) |
+| `OPENFGA_AUTH_OIDC_JWKS_CACHE_MAX_AGE_MS` | `auth.oidc.jwksCacheMaxAgeMs` | non-negative int (default 600000); see `docs/features/oidc-auth.md` |
+| `OPENFGA_AUTH_OIDC_JWKS_COOLDOWN_MS` | `auth.oidc.jwksCooldownMs` | non-negative int (default 30000); see `docs/features/oidc-auth.md` |
+| `OPENFGA_OTEL_EXPORTER_HEADERS` | `otel.exporter.headers` | OTel key=value list (below) |
+| `OPENFGA_OTEL_RESOURCE_ATTRIBUTES` | `otel.resource.attributes` | OTel key=value list (below) |
 | `OPENFGA_LOG_LEVEL` | `log.level` | enum |
 | `OPENFGA_API_URL` | `loadModel.apiUrl` | string |
 | `OPENFGA_STORE_NAME` | `loadModel.storeName` | string |
 | `OPENFGA_STORE_ID` | `loadModel.storeId` | string |
+
+### Map-valued OpenTelemetry settings
+
+`OPENFGA_OTEL_EXPORTER_HEADERS` and `OPENFGA_OTEL_RESOURCE_ATTRIBUTES` use the OpenTelemetry standard format of `OTEL_EXPORTER_OTLP_HEADERS` and `OTEL_RESOURCE_ATTRIBUTES`: comma-separated `key=value` pairs, for example `authorization=Bearer%20abc,x-team=core`. Keys and values are trimmed, values are percent-decoded, empty entries are ignored, and only the first `=` separates key from value. A malformed entry (no key, or an invalid percent-encoding) fails startup with an error that names the variable and the entry position but never echoes the entry, because headers can carry credentials.
 
 `NODE_EXTRA_CA_CERTS` is read by Node itself, not the application; it remains documented in `.env.example` and is not in the config schema.
 
@@ -183,6 +193,8 @@ Lowest to highest:
 3. `$development` / `$production` / `$test` block matching `NODE_ENV` (selected by c12 via `envName`).
 4. `OPENFGA_*` env vars, including those loaded from `.env` by c12's `dotenv: true`.
 5. Test-only programmatic overrides applied *after* env-overlay via the in-repo helper documented in §Test Strategy. **Not** c12's `overrides` option — that applies inside `loadConfig` and would be beaten by env-overlay despite the stated ordering.
+
+Arrays are replaced, not concatenated: when a higher-precedence layer sets an array (for example `auth.presharedKeys` or `auth.oidc.subjects`), it replaces the lower layer's array wholesale. Objects merge recursively.
 
 Explicitly disabled c12 layers (locked off via the loader call in §File Discovery): RC files (`.openfgarc`, `~/.openfgarc`), `package.json` `openfga` field. If any of those exist on a contributor's machine they have no effect on this server's runtime configuration.
 
@@ -326,7 +338,7 @@ Tests:
 
 ## .env.example, README, and Example Config
 
-- `.env.example` continues to exist with a header comment pointing at `openfga.config.example.yaml` as the recommended primary surface for non-platform deployments. Env-var-only deployments (Vercel, Heroku, etc.) remain a first-class supported path.
+- `.env.example` continues to exist with a header comment pointing at `openfga.config.example.yaml` as the recommended primary surface for non-platform deployments. Env-var-only deployments remain a first-class supported path.
 - New `openfga.config.example.yaml` ships at the repo root, mirroring the field set in `.env.example` and demonstrating per-env override blocks.
 - `README.md` Configuration section documents both surfaces, the merge precedence, and the env-var-to-config-path mapping table (link to this spec for the canonical table).
 

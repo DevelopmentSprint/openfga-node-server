@@ -101,12 +101,24 @@ export class InMemoryTupleStore implements TupleStore {
     condition?: RelationshipCondition
   }> = []
 
+  /**
+   * Add a tuple. A repeat of an already-added tuple key (object,
+   * relation, user) is ignored regardless of its condition: the FIRST
+   * occurrence wins, matching upstream OpenFGA's contextual-tuple
+   * de-duplication (internal/check/request.go; openfga-k2a.15). This is
+   * the single point every evaluation endpoint's contextual overlay
+   * goes through (see routes/_helpers/contextual-tuples.ts).
+   */
   add(objectRef: string, relation: string, userStr: string, condition?: RelationshipCondition): void {
     const idx = objectRef.indexOf(':')
     if (idx < 0) throw new Error(`Invalid object: ${objectRef}`)
+    const object_type = objectRef.slice(0, idx)
+    const object_id = objectRef.slice(idx + 1)
+    if (this.tuples.some(t => t.object_type === object_type && t.object_id === object_id
+      && t.relation === relation && t.user_str === userStr)) return
     this.tuples.push({
-      object_type: objectRef.slice(0, idx),
-      object_id: objectRef.slice(idx + 1),
+      object_type,
+      object_id,
       relation,
       user_str: userStr,
       condition,

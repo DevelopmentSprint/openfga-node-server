@@ -14,29 +14,24 @@ Three independent layers cooperate to produce auto-merge:
 
 ## Eligibility Matrix
 
-A Dependabot PR is auto-merged when **both** the eligibility check matches **and** the security override does not block.
+A Dependabot PR is auto-merged when the eligibility check matches.
 
 **Eligibility check (auto-merge candidate):**
 
 - `update-type` is `version-update:semver-patch` (any `dependency-type`, including `indirect`), OR
 - `update-type` is `version-update:semver-minor` AND `dependency-type` is `direct:development`.
 
-**Security override (blocks auto-merge):**
+If the eligibility check passes, auto-merge. Otherwise, log a structured skip line and exit. There is no security-update override (owner decision: it would need a Dependabot-alerts token the project does not provision).
 
-- The PR is flagged as a security update AND `update-type` is NOT `version-update:semver-patch`.
+| `update-type` | `dependency-type` | Outcome |
+|---|---|---|
+| patch | any | auto |
+| minor | `direct:development` | auto |
+| minor | `direct:production` | manual |
+| minor | `indirect` | manual |
+| major | any | manual |
 
-If the eligibility check passes and the security override does not block, auto-merge. Otherwise, log a structured skip line and exit.
-
-| `update-type` | `dependency-type` | Security flag | Outcome |
-|---|---|---|---|
-| patch | any | any | auto |
-| minor | `direct:development` | no | auto |
-| minor | `direct:development` | yes | manual (security override) |
-| minor | `direct:production` | any | manual |
-| minor | `indirect` | any | manual |
-| major | any | any | manual |
-
-Grouped updates (per `.github/dependabot.yml`'s `groups` block) report the highest semver bump in the group. A group containing one minor and three patches reports `semver-minor`, which auto-merges only when the group is on `direct:development` and is not a security update.
+Grouped updates (per `.github/dependabot.yml`'s `groups` block) report the highest semver bump in the group. A group containing one minor and three patches reports `semver-minor`, which auto-merges only when the group is on `direct:development`.
 
 ## Boundary: Who Can Auto-Merge?
 
@@ -57,7 +52,7 @@ For Dependabot PRs that the workflow logs `decision=skip`, the human review path
 1. Read the upstream changelog or release notes linked in the PR body.
 2. For prod-dep majors and prod-dep minors: check the call sites locally; for runtime libraries, smoke-boot the built server.
 3. For tooling majors (TypeScript, `@types/node`): run `pnpm typecheck`, `pnpm lint`, `pnpm build` on the PR branch.
-4. For security minors and majors: read the CVE advisory linked from the GitHub Security tab; merge if the fix is applicable and CI green; if the major version brings other breaking changes, prefer pinning at the prior major and pulling in the patched release on the prior major if available.
+4. For security-related majors and prod-dep minors (which the workflow cannot identify as security updates): read the CVE advisory linked from the GitHub Security tab; merge if the fix is applicable and CI green; if the major version brings other breaking changes, prefer pinning at the prior major and pulling in the patched release on the prior major if available.
 
 ## CI Check Names
 
@@ -91,17 +86,14 @@ After resolving the underlying issue, re-enable in the reverse order (widest →
 
 When changing this policy or the workflow, walk through these synthetic cases and confirm the workflow's eligibility step would log the expected decision:
 
-| Synthetic case | `update-type` | `dependency-type` | `alert-state` | Expected `decision` |
-|---|---|---|---|---|
-| Patch dev-dep bump | `version-update:semver-patch` | `direct:development` | (empty) | `auto-merge` |
-| Patch prod-dep bump | `version-update:semver-patch` | `direct:production` | (empty) | `auto-merge` |
-| Patch security on prod | `version-update:semver-patch` | `direct:production` | (set) | `auto-merge` |
-| Minor dev-dep bump | `version-update:semver-minor` | `direct:development` | (empty) | `auto-merge` |
-| Minor security on dev-dep | `version-update:semver-minor` | `direct:development` | (set) | `skip` (security override) |
-| Minor prod-dep bump | `version-update:semver-minor` | `direct:production` | (empty) | `skip` |
-| Minor indirect bump | `version-update:semver-minor` | `indirect` | (empty) | `skip` |
-| Major dev-dep bump | `version-update:semver-major` | `direct:development` | (empty) | `skip` |
-| Major prod-dep security | `version-update:semver-major` | `direct:production` | (set) | `skip` (security override) |
+| Synthetic case | `update-type` | `dependency-type` | Expected `decision` |
+|---|---|---|---|
+| Patch dev-dep bump | `version-update:semver-patch` | `direct:development` | `auto-merge` |
+| Patch prod-dep bump | `version-update:semver-patch` | `direct:production` | `auto-merge` |
+| Minor dev-dep bump | `version-update:semver-minor` | `direct:development` | `auto-merge` |
+| Minor prod-dep bump | `version-update:semver-minor` | `direct:production` | `skip` |
+| Minor indirect bump | `version-update:semver-minor` | `indirect` | `skip` |
+| Major dev-dep bump | `version-update:semver-major` | `direct:development` | `skip` |
 
 ## Cross-References
 

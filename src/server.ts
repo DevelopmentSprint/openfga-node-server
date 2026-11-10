@@ -4,8 +4,8 @@
  * This file is the entrypoint for `pnpm dev` / `pnpm start` and any
  * bare-metal, container, or VM deployment. It binds TCP sockets via
  * `@hono/node-server`'s `serve()`, so it must NOT be imported by any
- * runtime that supplies its own request transport (e.g. Vercel
- * Functions). The Hono app itself lives in `./index.ts`, which is what
+ * runtime that supplies its own request transport (e.g. a
+ * serverless function host). The Hono app itself lives in `./index.ts`, which is what
  * such platforms import.
  *
  * Reads the resolved `config` (see `src/config.ts` and
@@ -28,10 +28,11 @@ import app from './index'
 import { logger } from './logger'
 import { config } from './config'
 import { applyMigrationsOnStartIfEnabled } from './storage/migrate-on-start'
-import { describeDb, requireDbUrl } from './storage/db'
+import { closeDb, describeDb, requireDbUrl } from './storage/db'
 import { checkReadiness } from './storage/readiness'
 import { prefetchOidcJwks } from './middleware/oidc'
-import { initOtelSdk } from './observability/otel'
+import { initOtelSdk, shutdownOtelSdk } from './observability/otel'
+import { closeServers, createShutdownHandler, type ClosableServer } from './shutdown'
 
 // Initialize OpenTelemetry SDK BEFORE any other module that might
 // participate in tracing. No-op when config.otel.enabled is false —
@@ -119,14 +120,23 @@ if (!readiness.ok) {
 // the configured db.url.
 logger.info(describeDb(), 'storage_connected')
 
+if (config.auth.mode === 'none') {
+  logger.warn(
+    { authMode: 'none' },
+    'auth_disabled; auth.mode=none accepts unauthenticated requests. Set auth.mode to preshared or oidc for any non-local deployment.',
+  )
+}
+
+const servers: ClosableServer[] = []
+
 if (config.listeners.http.enabled) {
-  serve({ fetch: app.fetch, port: config.listeners.http.port }, (info) => {
+  servers.push(serve({ fetch: app.fetch, port: config.listeners.http.port }, (info) => {
     logger.info({ protocol: 'http', port: info.port }, 'server_listening')
-  })
+  }) as ClosableServer)
 }
 
 if (config.tls.certFile && config.tls.keyFile) {
-  serve(
+  servers.push(serve(
     {
       fetch: app.fetch,
       port: config.listeners.https.port,
@@ -139,5 +149,19 @@ if (config.tls.certFile && config.tls.keyFile) {
     (info) => {
       logger.info({ protocol: 'https', port: info.port }, 'server_listening')
     },
-  )
+  ) as ClosableServer)
+}
+
+// Single owner of process shutdown. Registering these listeners
+// disables Node's default exit-on-signal, so the handler always ends
+// in process.exit. OTel installs no signal handlers of its own.
+const shutdown = createShutdownHandler({
+  closeListeners: () => closeServers(servers),
+  shutdownTelemetry: shutdownOtelSdk,
+  closeDatabase: closeDb,
+  exit: code => process.exit(code),
+  log: logger,
+})
+for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+  process.on(signal, () => { void shutdown(signal) })
 }

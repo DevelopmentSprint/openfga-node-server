@@ -88,7 +88,7 @@ describeIfDb('POST /stores/:storeId/list-users', () => {
     expect(json.users).toEqual([{ object: { type: 'user', id: 'carol' } }])
   })
 
-  it('returns 404 when the requested authorization_model_id does not exist', async () => {
+  it('returns 400 when the requested authorization_model_id does not exist', async () => {
     const { app, storeId } = await setup()
     const res = await app.fetch(listUsersReq(storeId, {
       authorization_model_id: '01ZZZZZZZZZZZZZZZZZZZZZZZZ',
@@ -96,7 +96,7 @@ describeIfDb('POST /stores/:storeId/list-users', () => {
       relation: 'viewer',
       user_filters: [{ type: 'user' }],
     }))
-    expect(res.status).toBe(404)
+    expect(res.status).toBe(400)
   })
 
   it('returns 400 when the requested relation is not defined on the type', async () => {

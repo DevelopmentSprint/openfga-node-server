@@ -33,6 +33,39 @@ function readNonEmpty(env: EnvLike, key: string): string | undefined {
   return trimmed
 }
 
+/**
+ * Parse an OpenTelemetry-standard key/value list, the format of
+ * OTEL_EXPORTER_OTLP_HEADERS and OTEL_RESOURCE_ATTRIBUTES: comma-separated
+ * `key=value` pairs. Keys and values are trimmed, values are
+ * percent-decoded, empty entries are ignored, and only the first `=`
+ * separates key from value.
+ *
+ * An invalid entry throws an error that names the variable and the entry
+ * position but never echoes the entry: headers can carry credentials.
+ */
+export function parseOtelKeyValueList(envKey: string, raw: string): Record<string, string> {
+  const out: Record<string, string> = {}
+  const entries = raw.split(',')
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i]!.trim()
+    if (entry === '') continue
+    const eq = entry.indexOf('=')
+    const key = eq > 0 ? entry.slice(0, eq).trim() : ''
+    if (key === '') {
+      throw new Error(`${envKey}: entry ${i + 1} is not a valid key=value pair (expected comma-separated key=value pairs)`)
+    }
+    let value: string
+    try {
+      value = decodeURIComponent(entry.slice(eq + 1).trim())
+    }
+    catch {
+      throw new Error(`${envKey}: entry ${i + 1} has an invalid percent-encoded value`)
+    }
+    out[key] = value
+  }
+  return out
+}
+
 function ensureObject(target: Merged, key: string): Merged {
   const existing = target[key]
   if (existing && typeof existing === 'object' && !Array.isArray(existing)) {
@@ -125,6 +158,8 @@ export function applyEnvOverrides(raw: unknown, env: EnvLike = process.env): unk
   set(['auth', 'oidc', 'audience'], 'OPENFGA_AUTH_OIDC_AUDIENCE')
   set(['auth', 'oidc', 'clockSkewSec'], 'OPENFGA_AUTH_OIDC_CLOCK_SKEW_SEC')
   set(['auth', 'oidc', 'jwksUri'], 'OPENFGA_AUTH_OIDC_JWKS_URI')
+  set(['auth', 'oidc', 'jwksCacheMaxAgeMs'], 'OPENFGA_AUTH_OIDC_JWKS_CACHE_MAX_AGE_MS')
+  set(['auth', 'oidc', 'jwksCooldownMs'], 'OPENFGA_AUTH_OIDC_JWKS_COOLDOWN_MS')
 
   // Comma-separated array fields for OIDC. Same split/trim/drop-empty
   // policy as OPENFGA_AUTH_PRESHARED_KEYS.
@@ -168,6 +203,18 @@ export function applyEnvOverrides(raw: unknown, env: EnvLike = process.env): unk
   set(['otel', 'spans', 'auth'], 'OPENFGA_OTEL_SPANS_AUTH')
   set(['otel', 'spans', 'idempotency'], 'OPENFGA_OTEL_SPANS_IDEMPOTENCY')
 
+  // Map-valued fields use the OpenTelemetry-standard key=value list
+  // format (see parseOtelKeyValueList).
+  for (const [envKey, configPath] of [
+    ['OPENFGA_OTEL_EXPORTER_HEADERS', ['otel', 'exporter', 'headers']],
+    ['OPENFGA_OTEL_RESOURCE_ATTRIBUTES', ['otel', 'resource', 'attributes']],
+  ] as const) {
+    const raw = readNonEmpty(env, envKey)
+    if (raw !== undefined) {
+      setPath(base, configPath as readonly string[], parseOtelKeyValueList(envKey, raw))
+    }
+  }
+
   // Comma-separated list fields.
   for (const [envKey, configPath] of [
     ['OPENFGA_OTEL_PROPAGATORS', ['otel', 'propagators']],
@@ -186,6 +233,7 @@ export function applyEnvOverrides(raw: unknown, env: EnvLike = process.env): unk
 
   // ─── top-level ──────────────────────────────────────────────────
   set(['migrateOnStart'], 'OPENFGA_MIGRATE_ON_START')
+  set(['maxChecksPerBatchCheck'], 'OPENFGA_MAX_CHECKS_PER_BATCH_CHECK')
 
   return base
 }
