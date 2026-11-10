@@ -380,8 +380,9 @@ describeIfDb('durable write fences', () => {
       await sql.raw(`create sequence ${ns}.pzm4_attempts`).execute(getDb())
       // First insert attempt: wait, then fail with a retryable deadlock
       // SQLSTATE. Sequences are not transactional, so the counter
-      // survives the rollback.
-      await sql.raw(`create function ${ns}.pzm4_deadlock_once() returns trigger language plpgsql as $$ begin if nextval('${ns}.pzm4_attempts') = 1 then perform pg_sleep(0.3); raise exception 'injected deadlock' using errcode = '40P01'; end if; return NEW; end $$`).execute(getDb())
+      // survives the rollback. Only this test's store is affected: other
+      // test files insert into the same table concurrently in CI.
+      await sql.raw(`create function ${ns}.pzm4_deadlock_once() returns trigger language plpgsql as $$ begin if NEW.store_id = '${id}' and nextval('${ns}.pzm4_attempts') = 1 then perform pg_sleep(0.3); raise exception 'injected deadlock' using errcode = '40P01'; end if; return NEW; end $$`).execute(getDb())
       await sql.raw(`create trigger pzm4_deadlock_once before insert on ${ns}.tuple for each row execute function ${ns}.pzm4_deadlock_once()`).execute(getDb())
       const attempts = async () => (await sql<{ n: string }>`select last_value::text as n from ${sql.raw(`${ns}.pzm4_attempts`)}`.execute(getDb())).rows[0]!.n
       try {
