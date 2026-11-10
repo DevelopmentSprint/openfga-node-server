@@ -45,6 +45,9 @@ jobs:
         id: meta
         # Pinned by 40-char commit SHA. Updates arrive via Dependabot.
         uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+        with:
+          # Populates alert-state so the security override can fire.
+          alert-lookup: true
 
       - name: Apply eligibility matrix
         id: eligibility
