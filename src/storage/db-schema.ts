@@ -102,12 +102,25 @@ export interface AssertionsTable {
   updated_at: Generated<string>
 }
 
+/**
+ * Operational write-fence state (optional extension,
+ * docs/features/write-fences.md). `generation` is a canonical positive
+ * decimal string (compared numerically in code); `not_after` is an
+ * ISO-8601 UTC timestamp string.
+ */
+export interface WriteFenceTable {
+  store_id: string
+  key: string
+  generation: string
+  not_after: string
+}
+
 export interface Database {
   store: StoreTable
   authorization_model: AuthorizationModelTable
   tuple: TupleTable
   tuple_change: TupleChangeTable
   idempotency_keys: IdempotencyKeyTable
-  write_fence: { store_id: string, key: string, generation: string, not_after: string }
+  write_fence: WriteFenceTable
   assertions: AssertionsTable
 }

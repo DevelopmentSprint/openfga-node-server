@@ -21,6 +21,8 @@
  *   GET    /stores/:storeId/changes                                → tuples.ts
  *   GET    /stores/:storeId/assertions/:authorizationModelId       → assertions.ts
  *   PUT    /stores/:storeId/assertions/:authorizationModelId       → assertions.ts
+ *   PUT    /x-ext/stores/:storeId/write-fences/:key               → write-fences.ts
+ *          (extension; mounted only when config.writeFences.enabled)
  *
  * The wire format must match `@openfga/sdk` byte-for-byte. The SDK
  * snake_cases everything, so the bodies and responses here do too.
@@ -32,7 +34,9 @@
  *   2. bodyLimit    1 MiB cap on request bodies — 413 JSON envelope
  *   3. auth         /stores/* — none | preshared | oidc per config
  *   4. requireStore /stores/:storeId/* — 404 on unknown store
- *   5. idempotency  Idempotency-Key for configured mutating endpoints
+ *   5. writeFencePreflight  /stores/:storeId/write fence admission
+ *                   (only when config.writeFences.enabled)
+ *   6. idempotency  Idempotency-Key for configured mutating endpoints
  */
 import { logger } from '../logger'
 import { ConditionError } from '../evaluator/conditions'
@@ -50,10 +54,10 @@ import { evaluationRoutes } from './evaluation'
 import { healthRoutes } from './health'
 import { modelsRoutes } from './models'
 import { storesRoutes } from './stores'
-import { lockWriteFence, WriteFenceError } from '../storage/write-fences'
-import { parseWriteContext, WriteFenceInputError, writeFenceRoutes } from './write-fences'
+import { WriteFenceError } from '../storage/write-fences'
+import { StoreNotFoundError } from '../storage/store-mutation'
+import { EXTENSION_PREFIX, writeFencePreflight, writeFenceRoutes } from './write-fences'
 import { tuplesRoutes } from './tuples'
-import { getDb } from '../storage/db'
 
 /** Maximum accepted request body size. A code constant, not configuration. */
 export const MAX_BODY_BYTES = 1024 * 1024
@@ -64,14 +68,16 @@ export function buildApp(): Hono {
   // (upstream NotFoundErrorCode `undefined_endpoint`) instead of Hono's
   // plain-text 404.
   app.notFound((c) => {
-    if (c.req.path === '/stores' || c.req.path.startsWith('/stores/')) {
+    // Extension paths (/x-ext/...) get the same JSON envelope, whether
+    // or not the extension is enabled.
+    if (c.req.path === '/stores' || c.req.path.startsWith('/stores/') || c.req.path.startsWith(`${EXTENSION_PREFIX}/`)) {
       return c.json({ code: 'undefined_endpoint', message: 'Endpoint not enabled' }, 404)
     }
     return c.text('404 Not Found', 404)
   })
   app.onError((error, c) => {
-    if (error instanceof WriteFenceInputError) return c.json({ code: 'invalid_argument', message: error.message }, 400)
     if (error instanceof WriteFenceError) return c.json({ code: error.code, message: error.message }, 409)
+    if (error instanceof StoreNotFoundError) return c.json({ code: 'store_id_not_found', message: error.message }, 404)
     if (error instanceof ConditionError || error instanceof ModelReferenceError) return c.json({ code: error.code, message: error.message }, 400)
     logger.error({ err: error }, 'request_failed')
     return c.json({ code: 'internal_error', message: 'Internal Server Error' }, 500)
@@ -109,7 +115,8 @@ export function buildApp(): Hono {
   // reachable for liveness probes without credentials. Mode is chosen
   // at boot from config.auth (OPENFGA_AUTH_MODE env-overlay); see
   // src/middleware/auth.ts for the dispatch and the supported modes.
-  app.use('/stores/*', authMiddleware(getAuthConfig()))
+  const auth = authMiddleware(getAuthConfig())
+  app.use('/stores/*', auth)
 
   // Store-existence guard. Mounted on /stores/:storeId/* so every
   // store-scoped route returns a 404 store_id_not_found before any
@@ -119,17 +126,19 @@ export function buildApp(): Hono {
   // idempotency-key entries for non-existent stores). See openfga-rv0.
   app.use('/stores/:storeId/*', requireStore())
 
-  // Cached responses must not bypass deadline admission or stale-fence checks.
-  // The actual mutation still validates and holds its fence in its own transaction.
-  app.use('/stores/:storeId/write', async (c, next) => {
-    if (c.req.method === 'POST') {
-      const context = parseWriteContext(c.req.raw.headers)
-      if (config.idempotency.mode !== 'off' && c.req.header('Idempotency-Key') && context.fence && context.deadline) {
-        await getDb().transaction().execute(trx => lockWriteFence(trx, c.req.param('storeId')!, context.fence!, context.deadline!))
-      }
-    }
-    await next()
-  })
+  // Optional durable write-fence extension (docs/features/write-fences.md).
+  // Off by default; when off nothing below is mounted, the /x-ext/
+  // route falls through to notFound and fence headers on /write are
+  // ignored, so the surface is identical to upstream OpenFGA. When on,
+  // the acquisition route gets the same auth and store-existence
+  // checks as /stores/:storeId/*, and the /write preflight runs BEFORE
+  // idempotency so a cached 2xx cannot bypass fence admission.
+  const writeFencesEnabled = config.writeFences.enabled
+  if (writeFencesEnabled) {
+    app.use(`${EXTENSION_PREFIX}/stores/*`, auth)
+    app.use(`${EXTENSION_PREFIX}/stores/:storeId/*`, requireStore())
+    app.use('/stores/:storeId/write', writeFencePreflight())
+  }
 
   // Idempotency-Key support for the three mutating endpoints in scope
   // (PRD §"Idempotency keys", docs/features/idemnpotency-keys.md).
@@ -155,7 +164,7 @@ export function buildApp(): Hono {
   app.route('/', modelsRoutes)
   app.route('/', evaluationRoutes)
   app.route('/', tuplesRoutes)
-  app.route('/', writeFenceRoutes)
+  if (writeFencesEnabled) app.route('/', writeFenceRoutes)
   app.route('/', assertionsRoutes)
 
   return app

@@ -19,12 +19,13 @@
 import { DEFAULT_READ_CONTEXT, type ReadContext } from './read-context'
 import { sql, type RawBuilder, type Transaction } from 'kysely'
 import type { TupleKey, TupleKeyWithoutCondition } from '@openfga/sdk'
-import { getDb, getDialect, getNamespace } from './db'
+import { getDb, getDialect } from './db'
 import type { Database } from './db-schema'
 import { dialectBigintParam, dialectTimestampParam, isPostgres } from './dialect'
 import { generateId } from './ids'
 import { traced } from '../observability/otel'
 import { assertWriteDeadline, lockWriteFence, type WriteDeadline, type WriteFence } from './write-fences'
+import { inStoreMutationTransaction, lockStoreForMutation, retryOnTransactionConflict } from './store-mutation'
 
 export interface TupleRow {
   condition_name?: string | null
@@ -128,48 +129,7 @@ export async function applyTupleMutations(
   )
 }
 
-export class StoreNotFoundError extends Error {
-  constructor(readonly storeId: string) {
-    super(`store ${storeId} not found`)
-    this.name = 'StoreNotFoundError'
-  }
-}
-
-/**
- * Postgres SQLSTATEs for which the whole mutation transaction is
- * safely retryable: `40P01` deadlock_detected and `40001`
- * serialization_failure. The transaction rolled back, so re-running
- * it from the start cannot double-apply anything.
- */
-const RETRYABLE_SQLSTATES = new Set(['40P01', '40001'])
-export const MAX_WRITE_ATTEMPTS = 3
-
-function isRetryableTransactionError(err: unknown): boolean {
-  const code = (err as { code?: unknown } | null)?.code
-  return typeof code === 'string' && RETRYABLE_SQLSTATES.has(code)
-}
-
-/**
- * Run `attempt` up to `maxAttempts` times, retrying only on a
- * deadlock or serialization failure. Any other error (including the
- * domain errors thrown for duplicates, missing tuples, and deleted
- * stores) propagates immediately.
- */
-export async function retryOnTransactionConflict<T>(
-  attempt: () => Promise<T>,
-  maxAttempts: number = MAX_WRITE_ATTEMPTS,
-  backoffMs: (attemptNumber: number) => number = n => n * (5 + Math.random() * 20),
-): Promise<T> {
-  for (let n = 1; ; n++) {
-    try {
-      return await attempt()
-    }
-    catch (err) {
-      if (n >= maxAttempts || !isRetryableTransactionError(err)) throw err
-      await new Promise(resolve => setTimeout(resolve, backoffMs(n)))
-    }
-  }
-}
+export { MAX_WRITE_ATTEMPTS, retryOnTransactionConflict, StoreNotFoundError } from './store-mutation'
 
 interface PlannedMutation<T> {
   /** Position in the caller's array; errors and changelog order use it. */
@@ -205,15 +165,19 @@ async function applyTupleMutationsImpl(
   storeId: string,
   mutations: TupleMutations,
 ): Promise<void> {
+  if (mutations.fence && !mutations.deadline) throw new TypeError('a fenced write requires a deadline')
   const writes = plan<TupleKey | TupleKeyWithoutCondition>(mutations.writes)
   const deletes = plan<TupleKey | TupleKeyWithoutCondition>(mutations.deletes)
-  assertWriteDeadline(mutations.deadline)
+  // Every attempt re-checks the caller's ORIGINAL deadline object; a
+  // retry never restarts it.
   await retryOnTransactionConflict(() => runMutationTransaction(storeId, mutations, writes, deletes))
 }
 
 /**
- * One mutation transaction. Order of operations:
+ * One mutation transaction. Order of operations (lock order shared
+ * with write-fence acquisition, see ./store-mutation.ts):
  *
+ * 0. Optional deadline: refuse the attempt if it is already late.
  * 1. Postgres: take the per-store transaction-scoped advisory lock
  *    BEFORE anything else. Mutation transactions of one store are
  *    therefore serialized: the next one cannot pass this point until
@@ -223,17 +187,25 @@ async function applyTupleMutationsImpl(
  *    Postgres so a concurrent `deleteStore` UPDATE waits for us — or,
  *    if it committed first, we observe `deleted_at` and fail with
  *    StoreNotFoundError instead of writing into a deleted store.
- * 3. Apply tuple mutations in key order (deadlock avoidance), writes
+ * 3. Optional write fence: lock the fence row (row lock on Postgres;
+ *    SQLite's write lock is taken by the same UPDATE) and require the
+ *    caller's generation to be current. The lock is held until this
+ *    transaction ends, so a successor acquisition waits for it. The
+ *    deadline (capped by the stored lease expiry) is checked after the
+ *    locks, i.e. after any lock wait.
+ * 4. Apply tuple mutations in key order (deadlock avoidance), writes
  *    before deletes as before. In `error` mode all mutations of a
  *    phase are attempted and the failure with the lowest request index
  *    is reported, so the reported tuple matches request-order
  *    processing. Failed attempts are side-effect free inside the
  *    transaction (ON CONFLICT DO NOTHING / zero-row DELETE), and the
  *    thrown error rolls everything back.
- * 4. Record changelog rows in request order (writes, then deletes) so
+ * 5. Record changelog rows in request order (writes, then deletes) so
  *    ReadChanges ordering within one request is unchanged. On Postgres
  *    each row is stamped with `changelogTimestamp`, evaluated after the
  *    lock in step 1.
+ * 6. Optional deadline: checked once more before COMMIT (cooperative
+ *    cancellation; this is not a commit-time cutoff).
  */
 async function runMutationTransaction(
   storeId: string,
@@ -241,24 +213,14 @@ async function runMutationTransaction(
   writes: PlannedMutation<TupleKey | TupleKeyWithoutCondition>[],
   deletes: PlannedMutation<TupleKey | TupleKeyWithoutCondition>[],
 ): Promise<void> {
+  assertWriteDeadline(mutations.deadline)
   const postgres = isPostgres(getDialect())
-  const builder = postgres ? getDb().transaction().setIsolationLevel('read committed') : getDb().transaction()
-  await builder.execute(async (trx) => {
-    if (postgres) {
-      await sql`select pg_advisory_xact_lock(hashtext(${`${getNamespace()}.tuple_write`}), hashtext(${storeId}))`.execute(trx)
-    }
+  await inStoreMutationTransaction(async (trx) => {
+    await lockStoreForMutation(trx, storeId)
 
-    const liveStore = trx.selectFrom('store').select('id')
-      .where('id', '=', storeId).where('deleted_at', 'is', null)
-    if (!(await (postgres ? liveStore.forShare() : liveStore).executeTakeFirst())) {
-      throw new StoreNotFoundError(storeId)
-    }
-
-    let deadline = mutations.deadline
-    if (mutations.fence) {
-      if (!deadline) throw new Error('A fenced write requires a deadline')
-      deadline = await lockWriteFence(trx, storeId, mutations.fence, deadline)
-    }
+    const deadline = mutations.fence
+      ? await lockWriteFence(trx, storeId, mutations.fence, mutations.deadline!)
+      : mutations.deadline
     assertWriteDeadline(deadline)
 
     const insertedWrites = new Set<number>()

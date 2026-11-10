@@ -259,6 +259,14 @@ const IdempotencySchema = z
   })
   .prefault({} as never)
 
+// Optional durable write-fence extension (docs/features/write-fences.md).
+// Off by default: the HTTP surface is then identical to upstream OpenFGA.
+const WriteFencesSchema = z
+  .object({
+    enabled: strictBool('writeFences.enabled').default(false),
+  })
+  .prefault({} as never)
+
 const LoadModelSchema = z
   .object({
     apiUrl: z.string().min(1).default('http://localhost:8080'),
@@ -337,6 +345,7 @@ export const ConfigSchema = z
     log: LogSchema,
     auth: AuthSchema,
     idempotency: IdempotencySchema,
+    writeFences: WriteFencesSchema,
     loadModel: LoadModelSchema,
     otel: OtelSchema,
     migrateOnStart: strictBool('migrateOnStart').default(false),
