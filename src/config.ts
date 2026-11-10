@@ -28,6 +28,50 @@ import { ConfigSchema, type Config } from './config-schema'
 
 export type { Config } from './config-schema'
 
+const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+/**
+ * c12 layer merger. Sources are ordered highest precedence first
+ * (the same contract as c12's default `defu`). Plain objects merge
+ * recursively; every other value, ARRAYS INCLUDED, is replaced
+ * wholesale by the highest-precedence layer that defines it
+ * (`null`/`undefined` are skipped). `defu` concatenates arrays, which
+ * made a `$production.auth.presharedKeys` block append to the base
+ * keys instead of replacing them; docs/features/configuration.md
+ * §Merge Precedence says the higher layer wins.
+ */
+export function mergeConfigLayers<T>(...sources: Array<T | null | undefined>): T {
+  let result: Record<string, unknown> = {}
+  // Apply lowest precedence first so later (higher) layers overwrite.
+  for (let i = sources.length - 1; i >= 0; i--) {
+    const layer = sources[i]
+    if (isPlainObject(layer)) result = mergeInto(result, layer)
+  }
+  return result as T
+}
+
+function mergeInto(
+  base: Record<string, unknown>,
+  higher: Record<string, unknown>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...base }
+  for (const [key, value] of Object.entries(higher)) {
+    if (UNSAFE_KEYS.has(key) || value === null || value === undefined) continue
+    const existing = out[key]
+    if (isPlainObject(value)) {
+      out[key] = mergeInto(isPlainObject(existing) ? existing : {}, value)
+    }
+    else {
+      out[key] = Array.isArray(value) ? [...value] : value
+    }
+  }
+  return out
+}
+
 export interface LoadAndParseOptions {
   /**
    * Working directory passed to c12. Defaults to `process.cwd()`.
@@ -79,6 +123,7 @@ export async function loadAndParseConfig(opts: LoadAndParseOptions = {}): Promis
     rcFile: false,
     globalRc: false,
     packageJson: false,
+    merger: mergeConfigLayers,
   })
 
   let merged = applyEnvOverrides(raw ?? {}, env)
