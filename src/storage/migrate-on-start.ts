@@ -2,7 +2,7 @@
  * Self-host bootstrap helper for `OPENFGA_MIGRATE_ON_START`.
  *
  * Wired into `src/server.ts` only. NOT imported from `src/index.ts`,
- * which is the Hono app file Vercel auto-detects — running migrations
+ * which is the Hono app file serverless hosts import — running migrations
  * as a side effect of every cold-start invocation would be wrong on
  * any platform where `index.ts` is treated as a per-request entry
  * (the `kysely_migration_lock` advisory lock would correctly serialize
