@@ -201,23 +201,31 @@ describe('idempotency (Kysely port)', () => {
   const FP = 'fingerprint-A'
   const TTL = 60_000
 
-  it('claimKey returns claimed for a fresh key', async () => {
-    expect(await claimKey(KEY, FP, TTL)).toEqual({ kind: 'claimed' })
+  async function claimToken(key = KEY, fp = FP, opts?: { inFlightLeaseMs?: number }): Promise<number> {
+    const result = await claimKey(key, fp, TTL, opts)
+    if (result.kind !== 'claimed') throw new Error(`expected claimed, got ${result.kind}`)
+    return result.token
+  }
+
+  it('claimKey returns claimed with a claim token for a fresh key', async () => {
+    const result = await claimKey(KEY, FP, TTL)
+    expect(result.kind).toBe('claimed')
+    if (result.kind === 'claimed') expect(typeof result.token).toBe('number')
   })
 
   it('claimKey returns in_flight when an earlier claim is still in flight', async () => {
-    expect(await claimKey(KEY, FP, TTL)).toEqual({ kind: 'claimed' })
+    await claimToken()
     expect(await claimKey(KEY, FP, TTL)).toEqual({ kind: 'in_flight' })
   })
 
   it('claimKey returns mismatch when the same key is reclaimed with a different fingerprint', async () => {
-    expect(await claimKey(KEY, FP, TTL)).toEqual({ kind: 'claimed' })
+    await claimToken()
     expect(await claimKey(KEY, 'different-fp', TTL)).toEqual({ kind: 'mismatch' })
   })
 
   it('claimKey returns replay after completeKey', async () => {
-    expect(await claimKey(KEY, FP, TTL)).toEqual({ kind: 'claimed' })
-    await completeKey(KEY, 200, { ok: true })
+    const token = await claimToken()
+    expect(await completeKey(KEY, token, 200, { ok: true })).toBe(true)
     const result = await claimKey(KEY, FP, TTL)
     expect(result.kind).toBe('replay')
     if (result.kind === 'replay') {
@@ -227,26 +235,55 @@ describe('idempotency (Kysely port)', () => {
   })
 
   it('releaseKey removes an in-flight slot so a retry can claim again', async () => {
-    expect(await claimKey(KEY, FP, TTL)).toEqual({ kind: 'claimed' })
-    await releaseKey(KEY)
-    expect(await claimKey(KEY, FP, TTL)).toEqual({ kind: 'claimed' })
+    const token = await claimToken()
+    expect(await releaseKey(KEY, token)).toBe(true)
+    expect((await claimKey(KEY, FP, TTL)).kind).toBe('claimed')
   })
 
   it('TTL cutoff is computed in SQL — expired rows are deleted before claim', async () => {
-    expect(await claimKey(KEY, FP, TTL)).toEqual({ kind: 'claimed' })
-    await completeKey(KEY, 200, { ok: true })
+    const token = await claimToken()
+    await completeKey(KEY, token, 200, { ok: true })
     await sql`update openfga_idempotency_keys set created_at = '2000-01-01T00:00:00.000Z' where key = ${KEY}`.execute(getDb())
-    expect(await claimKey(KEY, 'different-fp', TTL)).toEqual({ kind: 'claimed' })
+    expect((await claimKey(KEY, 'different-fp', TTL)).kind).toBe('claimed')
   })
 
   it('completeKey serializes JSON response bodies for read-back via replay', async () => {
-    expect(await claimKey(KEY, FP, TTL)).toEqual({ kind: 'claimed' })
+    const token = await claimToken()
     const body = { stores: [{ id: 's1', name: 'first' }], next: 'cursor-abc' }
-    await completeKey(KEY, 201, body)
+    await completeKey(KEY, token, 201, body)
     const result = await claimKey(KEY, FP, TTL)
     expect(result.kind).toBe('replay')
     if (result.kind === 'replay') {
       expect(result.body).toEqual(body)
     }
+  })
+
+  // openfga-k2a.3 — in-flight lease and claim ownership.
+  it('an in-flight row older than the default lease is reclaimable within the TTL', async () => {
+    await claimToken()
+    // Age the abandoned in-flight row past the lease (minutes) but
+    // keep it inside a 24h TTL.
+    await sql`update openfga_idempotency_keys set created_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 hours') where key = ${KEY}`.execute(getDb())
+    const result = await claimKey(KEY, FP, 86_400_000)
+    expect(result.kind).toBe('claimed')
+  })
+
+  it('an in-flight row younger than the default lease still returns in_flight', async () => {
+    await claimToken()
+    await sql`update openfga_idempotency_keys set created_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-30 seconds') where key = ${KEY}`.execute(getDb())
+    expect(await claimKey(KEY, FP, 86_400_000)).toEqual({ kind: 'in_flight' })
+  })
+
+  it('a stale owner cannot complete over or release the new owner\'s claim', async () => {
+    const stale = await claimToken()
+    const current = await claimToken(KEY, FP, { inFlightLeaseMs: 0 })
+    expect(current).not.toBe(stale)
+
+    expect(await completeKey(KEY, stale, 200, { from: 'stale' })).toBe(false)
+    expect(await releaseKey(KEY, stale)).toBe(false)
+    expect(await claimKey(KEY, FP, TTL)).toEqual({ kind: 'in_flight' })
+
+    expect(await completeKey(KEY, current, 200, { from: 'current' })).toBe(true)
+    expect(await claimKey(KEY, FP, TTL)).toEqual({ kind: 'replay', status: 200, body: { from: 'current' } })
   })
 })

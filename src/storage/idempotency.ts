@@ -12,38 +12,81 @@
  *
  * Concurrency model:
  *
- *   - `claimKey` is the atomic entry point. It deletes any expired
- *     row for the key, then attempts an `INSERT ... ON CONFLICT
- *     (key) DO NOTHING`. If the insert wins, the caller owns the
- *     slot and must eventually call `completeKey` or `releaseKey`.
- *     If the insert loses, the caller reads the existing row to
- *     classify the result as in-flight, replay, or mismatch.
+ *   - `claimKey` is the atomic entry point. It deletes any row for the
+ *     key that is past the record TTL, or that is still `in_flight`
+ *     but past the in-flight lease (its owner crashed or hung), then
+ *     attempts an `INSERT ... ON CONFLICT (key) DO NOTHING`. If the
+ *     insert wins, the caller owns the slot and receives a claim
+ *     token; it must eventually call `completeKey` or `releaseKey`
+ *     with that token. If the insert loses, the caller reads the
+ *     existing row to classify the result as in-flight, replay, or
+ *     mismatch.
  *
  *   - `completeKey` records a final response so subsequent retries
  *     replay it.
  *
  *   - `releaseKey` removes an in-flight row when the handler errored
  *     (5xx or thrown exception) so the client can retry cleanly.
+ *
+ * Claim ownership (openfga-k2a.3):
+ *
+ *   Once a lease expires another request may reclaim the key. The
+ *   original (stale) owner may still finish later, so `completeKey`
+ *   and `releaseKey` only touch the row when it is still `in_flight`
+ *   AND carries the caller's claim token. A stale owner's writes are
+ *   no-ops and report `false`.
+ *
+ *   The token lives in `response_status` while the row is in flight.
+ *   That column is otherwise NULL until completion, when it is
+ *   overwritten with the HTTP status, so no schema change is needed.
+ *   Tokens are random negative 31-bit integers: they fit Postgres
+ *   `integer` and SQLite `INTEGER`, compare exactly on both engines,
+ *   and can never be mistaken for an HTTP status. A replay is only
+ *   produced for `completed` rows, so the token is never served.
  */
+import { randomInt } from 'node:crypto'
 import { sql } from 'kysely'
 import { getDb, getDialect } from './db'
 import { dialectNow, dialectNowMinus } from './dialect'
 
+/**
+ * How long an `in_flight` claim is honored before the key becomes
+ * reclaimable. Bounds how long a crashed or hung request can block
+ * retries (previously the full record TTL, 24h by default). Mutating
+ * handlers in this server complete in well under a second, so a
+ * request still running after this long is treated as abandoned.
+ */
+export const IN_FLIGHT_LEASE_MS = 5 * 60_000
+
+/** Largest claim-token magnitude: Postgres `integer` is int4. */
+const MAX_CLAIM_TOKEN = 2 ** 31 - 1
+
 export type ClaimResult =
-  | { kind: 'claimed' }
+  | { kind: 'claimed', token: number }
   | { kind: 'in_flight' }
   | { kind: 'mismatch' }
   | { kind: 'replay', status: number, body: unknown }
+
+export interface ClaimOptions {
+  /** Override the in-flight lease. Tests only; production uses IN_FLIGHT_LEASE_MS. */
+  inFlightLeaseMs?: number
+}
+
+function newClaimToken(): number {
+  return -randomInt(1, MAX_CLAIM_TOKEN)
+}
 
 /**
  * Atomically claim an idempotency-key slot or classify the existing
  * record. The `ttlMs` is enforced here: rows older than the cutoff
  * are deleted before the claim attempt, so TTL needs no separate
- * cleanup job.
+ * cleanup job. `in_flight` rows are additionally reclaimable once
+ * older than the in-flight lease (capped at `ttlMs`).
  *
  * Returns:
  *   - 'claimed' — the caller owns the slot and must follow up with
- *     `completeKey` (success / 4xx) or `releaseKey` (5xx / thrown).
+ *     `completeKey` (success / 4xx) or `releaseKey` (5xx / thrown),
+ *     passing the returned `token`.
  *   - 'in_flight' — a concurrent request holds the slot. Caller
  *     should respond 409.
  *   - 'mismatch' — the slot is claimed with a different fingerprint.
@@ -55,6 +98,7 @@ export async function claimKey(
   key: string,
   fingerprint: string,
   ttlMs: number,
+  options: ClaimOptions = {},
 ): Promise<ClaimResult> {
   // The DELETE+INSERT+SELECT runs as three separate queries against
   // the configured Kysely instance. The original pool.connect()
@@ -69,7 +113,8 @@ export async function claimKey(
   // level, so no wrapping transaction is needed for the three-step
   // protocol.
   const dialect = getDialect()
-  return await claimWithDb(dialect, key, fingerprint, ttlMs)
+  const leaseMs = Math.min(options.inFlightLeaseMs ?? IN_FLIGHT_LEASE_MS, ttlMs)
+  return await claimWithDb(dialect, key, fingerprint, ttlMs, leaseMs, true)
 }
 
 async function claimWithDb(
@@ -77,6 +122,8 @@ async function claimWithDb(
   key: string,
   fingerprint: string,
   ttlMs: number,
+  leaseMs: number,
+  mayRetry: boolean,
 ): Promise<ClaimResult> {
   const db = getDb()
 
@@ -95,20 +142,34 @@ async function claimWithDb(
   // mirror below uses the inclusive boundary's complement (`>`) to
   // stay consistent. Postgres microsecond now() effectively never
   // hit the equality boundary, so this is a no-op there in practice.
+  //
+  // The same rule applies to the in-flight lease: an `in_flight` row
+  // whose lease has run out is deleted here so this request can
+  // claim it. Two concurrent reclaimers both run the DELETE, but only
+  // one INSERT wins; the other sees the fresh row as in flight. A row
+  // inserted by the winner is never inside the lease cutoff, so a
+  // late DELETE from the loser cannot remove it.
   await db
     .deleteFrom('idempotency_keys')
     .where('key', '=', key)
-    .where(sql<boolean>`created_at <= ${dialectNowMinus(dialect, ttlMs)}`)
+    .where(eb => eb.or([
+      sql<boolean>`created_at <= ${dialectNowMinus(dialect, ttlMs)}`,
+      eb.and([
+        eb('status', '=', 'in_flight'),
+        sql<boolean>`created_at <= ${dialectNowMinus(dialect, leaseMs)}`,
+      ]),
+    ]))
     .execute()
 
+  const token = newClaimToken()
   const insertResult = await db
     .insertInto('idempotency_keys')
-    .values({ key, request_hash: fingerprint, status: 'in_flight' })
+    .values({ key, request_hash: fingerprint, status: 'in_flight', response_status: token })
     .onConflict(oc => oc.column('key').doNothing())
     .returning('key')
     .executeTakeFirst()
 
-  if (insertResult) return { kind: 'claimed' }
+  if (insertResult) return { kind: 'claimed', token }
 
   const lookup = await db
     .selectFrom('idempotency_keys')
@@ -117,11 +178,14 @@ async function claimWithDb(
     .where(sql<boolean>`created_at > ${dialectNowMinus(dialect, ttlMs)}`)
     .executeTakeFirst()
 
-  // The row was deleted between our DELETE and INSERT (rare TTL race).
-  // Retry once — the second attempt will succeed because no other
-  // request is holding the slot.
+  // The row was deleted between our INSERT and SELECT (TTL/lease race
+  // or the owner released it). Retry once — the second attempt will
+  // normally succeed because no other request is holding the slot.
+  // If it races again, report in-flight (409, retryable) rather than
+  // recursing without bound.
   if (!lookup) {
-    return claimWithDb(dialect, key, fingerprint, ttlMs)
+    if (mayRetry) return claimWithDb(dialect, key, fingerprint, ttlMs, leaseMs, false)
+    return { kind: 'in_flight' }
   }
 
   if (lookup.request_hash !== fingerprint) return { kind: 'mismatch' }
@@ -134,12 +198,18 @@ async function claimWithDb(
   }
 }
 
+/**
+ * Record the final response for a claim. Returns `false` (and writes
+ * nothing) when the caller no longer owns the claim — its lease
+ * expired and another request reclaimed the key.
+ */
 export async function completeKey(
   key: string,
+  token: number,
   status: number,
   body: unknown,
-): Promise<void> {
-  await getDb()
+): Promise<boolean> {
+  const result = await getDb()
     .updateTable('idempotency_keys')
     .set({
       status: 'completed',
@@ -152,12 +222,24 @@ export async function completeKey(
       completed_at: dialectNow(getDialect()),
     })
     .where('key', '=', key)
-    .execute()
+    .where('status', '=', 'in_flight')
+    .where('response_status', '=', token)
+    .executeTakeFirst()
+  return Number(result.numUpdatedRows) > 0
 }
 
-export async function releaseKey(key: string): Promise<void> {
-  await getDb()
+/**
+ * Drop an in-flight claim so the client can retry. Returns `false`
+ * (and deletes nothing) when the caller no longer owns the claim, so
+ * a stale owner can never delete the new owner's row or a completed
+ * record.
+ */
+export async function releaseKey(key: string, token: number): Promise<boolean> {
+  const result = await getDb()
     .deleteFrom('idempotency_keys')
     .where('key', '=', key)
-    .execute()
+    .where('status', '=', 'in_flight')
+    .where('response_status', '=', token)
+    .executeTakeFirst()
+  return Number(result.numDeletedRows) > 0
 }
