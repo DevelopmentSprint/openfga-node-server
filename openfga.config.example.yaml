@@ -129,6 +129,9 @@ loadModel:
 # deployments; prefer an explicit `pnpm migrate` deploy step there.
 migrateOnStart: false
 
+# Maximum checks in one BatchCheck request.
+maxChecksPerBatchCheck: 50
+
 # ──────────────────────────────────────────────────────────────────
 # OpenTelemetry
 #

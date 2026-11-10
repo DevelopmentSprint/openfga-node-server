@@ -8,6 +8,7 @@
  *   POST /stores/:storeId/list-objects  objects of `type` the user has `relation` on
  *   POST /stores/:storeId/list-users    users with `relation` on a given object
  */
+import { config } from '../config'
 import { readContext } from '../storage/read-context'
 import { logger } from '../logger'
 import { ConditionError } from '../evaluator/conditions'
@@ -176,9 +177,22 @@ evaluationRoutes.post('/stores/:storeId/expand', validate('json', ExpandBody), a
   return c.json({ tree: { root } })
 })
 
-evaluationRoutes.post('/stores/:storeId/batch-check', validate('json', BatchCheckBody), async (c) => {
+evaluationRoutes.post('/stores/:storeId/batch-check', validate('json', BatchCheckBody, { code: 'validation_error', schemaMessage: true }), async (c) => {
   const storeId = c.req.param('storeId')
   const body = c.req.valid('json')
+  if (body.checks.length > config.maxChecksPerBatchCheck) {
+    return c.json({
+      code: 'validation_error',
+      message: `batchCheck received ${body.checks.length} checks, the maximum allowed is ${config.maxChecksPerBatchCheck}`,
+    }, 400)
+  }
+  const correlationIds = new Set<string>()
+  for (const item of body.checks) {
+    if (correlationIds.has(item.correlation_id)) {
+      return c.json({ code: 'validation_error', message: `received duplicate correlation id: ${item.correlation_id}` }, 400)
+    }
+    correlationIds.add(item.correlation_id)
+  }
   const ctx = await loadModelIndex(storeId, body.authorization_model_id)
   if (!ctx) return c.json({ code: 'not_found', message: 'authorization model not found' }, 404)
 
@@ -191,7 +205,7 @@ evaluationRoutes.post('/stores/:storeId/batch-check', validate('json', BatchChec
       'openfga.batch_size': body.checks.length,
     }),
     async () => {
-      const acc: Record<string, { allowed?: boolean, error?: { internal_error?: string, input_error?: string, message?: string } }> = {}
+      const acc: Record<string, { allowed?: boolean, error?: { internal_error?: string, input_error?: string, message?: string } }> = Object.create(null)
       for (const item of body.checks) {
         try {
           validateObject(item.tuple_key.object)

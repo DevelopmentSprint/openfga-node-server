@@ -285,4 +285,18 @@ describeIfDb('@openfga/sdk conformance — OpenFgaClient against a live server',
     expect((await client.batchCheck({ checks: [{ ...tuple, correlationId: 'a' }] }, options)).result[0]?.allowed).toBe(true)
   })
 
+  it('batchCheck: 50 checks preserve correlation IDs and an item error through the SDK', async () => {
+    const { client } = await setupStoreAndModel()
+    await client.write({ writes: [{ user: 'user:alice', relation: 'viewer', object: 'doc:1' }] })
+    const response = await client.batchCheck({ checks: Array.from({ length: 50 }, (_, i) => ({
+      user: 'user:alice', relation: i === 49 ? 'missing' : 'viewer', object: 'doc:1',
+      correlationId: i === 0 ? '__proto__' : `check_${i}`,
+    })) }, { maxBatchSize: 50 })
+    expect(response.result).toHaveLength(50)
+    expect(response.result.find(item => item.correlationId === '__proto__')?.allowed).toBe(true)
+    const failed = response.result.find(item => item.correlationId === 'check_49')
+    expect(failed?.error).toEqual({ input_error: 'validation_error', message: "invalid relation: relation 'doc#missing' not found" })
+    expect(response.result.filter(item => item.allowed)).toHaveLength(49)
+  })
+
 })

@@ -29,9 +29,19 @@ const INVALID_ARGUMENT = {
   message: 'request validation failed',
 } as const
 
-export function validate<T extends Target, S extends ZodType>(target: T, schema: S) {
+interface ValidationOptions {
+  code?: 'invalid_argument' | 'validation_error'
+  /** Use explicit schema diagnostics for endpoints whose upstream contract defines them. */
+  schemaMessage?: boolean
+}
+
+export function validate<T extends Target, S extends ZodType>(target: T, schema: S, options: ValidationOptions = {}) {
+  const envelope = { ...INVALID_ARGUMENT, code: options.code ?? INVALID_ARGUMENT.code }
   const schemaValidator = zValidator(target, schema, (result, c) => {
-    if (!result.success) return c.json(INVALID_ARGUMENT, 400)
+    if (!result.success) return c.json({
+      ...envelope,
+      message: options.schemaMessage ? result.error.issues[0]?.message ?? envelope.message : envelope.message,
+    }, 400)
   })
 
   if (target !== 'json') return schemaValidator
@@ -44,7 +54,7 @@ export function validate<T extends Target, S extends ZodType>(target: T, schema:
       await c.req.json()
     }
     catch {
-      return c.json(INVALID_ARGUMENT, 400)
+      return c.json(envelope, 400)
     }
     return schemaValidator(c, next)
   }

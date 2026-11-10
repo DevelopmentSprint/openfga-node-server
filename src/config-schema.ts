@@ -320,6 +320,7 @@ export const ConfigSchema = z
     loadModel: LoadModelSchema,
     otel: OtelSchema,
     migrateOnStart: strictBool('migrateOnStart').default(false),
+    maxChecksPerBatchCheck: positiveInt('maxChecksPerBatchCheck', 50).refine(n => n <= 0xffff_ffff, 'maxChecksPerBatchCheck must fit uint32'),
   })
   .superRefine((cfg, ctx) => {
     const httpEnabled = cfg.listeners.http.enabled
