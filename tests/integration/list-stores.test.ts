@@ -146,12 +146,12 @@ describeIfDb('GET /stores', () => {
     expect(firstOurs.map(s => s.id)).toEqual([onlyRow.id])
   })
 
-  it('returns 400 invalid_argument for a malformed continuation_token', async () => {
+  it('returns 400 invalid_continuation_token for a malformed continuation_token', async () => {
     const app = buildApp()
     const res = await app.fetch(get('?continuation_token=not-a-real-token'))
     expect(res.status).toBe(400)
     const body = await res.json() as { code: string }
-    expect(body.code).toBe('invalid_argument')
+    expect(body.code).toBe('invalid_continuation_token')
   })
 
   it('rejects negative or non-numeric page_size at the validation boundary', async () => {
@@ -159,6 +159,6 @@ describeIfDb('GET /stores', () => {
     const res = await app.fetch(get('?page_size=abc'))
     expect(res.status).toBe(400)
     const body = await res.json() as { code: string }
-    expect(body.code).toBe('invalid_argument')
+    expect(body.code).toBe('validation_error')
   })
 })

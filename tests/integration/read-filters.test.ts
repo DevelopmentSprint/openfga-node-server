@@ -95,6 +95,6 @@ describeIfDb('/read object-filter semantics', () => {
     const res = await app.fetch(read(storeId, { tuple_key: { object: 'broken' } }))
     expect(res.status).toBe(400)
     const json = await res.json() as { code: string }
-    expect(json.code).toBe('invalid_argument')
+    expect(json.code).toBe('validation_error')
   })
 })

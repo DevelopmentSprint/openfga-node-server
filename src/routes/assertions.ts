@@ -9,6 +9,7 @@ import { Hono } from 'hono'
 import { getAssertions, writeAssertions } from '../storage/assertions'
 import { getAuthorizationModel } from '../storage/authorization-models'
 import { validate } from '../middleware/validation'
+import { modelNotFound } from './_helpers/model-errors'
 import { WriteAssertionsBody } from './schemas'
 
 export const assertionsRoutes = new Hono()
@@ -34,7 +35,7 @@ assertionsRoutes.put(
     const storeId = c.req.param('storeId')
     const authorizationModelId = c.req.param('authorizationModelId')
     const model = await getAuthorizationModel(storeId, authorizationModelId)
-    if (!model) return c.json({ code: 'not_found', message: 'authorization model not found' }, 404)
+    if (!model) return modelNotFound(c, storeId, authorizationModelId)
 
     const body = c.req.valid('json')
     await writeAssertions(storeId, authorizationModelId, body.assertions)

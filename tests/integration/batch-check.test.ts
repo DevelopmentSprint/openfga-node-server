@@ -127,7 +127,7 @@ describeIfDb('POST /stores/:storeId/batch-check', () => {
     }))
     expect(res.status).toBe(404)
     const body = await res.json() as { code: string }
-    expect(body.code).toBe('not_found')
+    expect(body.code).toBe('authorization_model_not_found')
   })
 
   it('rejects duplicate correlation_id at the validation boundary', async () => {
@@ -141,7 +141,7 @@ describeIfDb('POST /stores/:storeId/batch-check', () => {
     }))
     expect(res.status).toBe(400)
     const body = await res.json() as { code: string }
-    expect(body.code).toBe('invalid_argument')
+    expect(body.code).toBe('validation_error')
   })
 
   it('rejects malformed correlation_id (chars outside [A-Za-z0-9-]) at the validation boundary', async () => {
@@ -154,7 +154,7 @@ describeIfDb('POST /stores/:storeId/batch-check', () => {
     }))
     expect(res.status).toBe(400)
     const body = await res.json() as { code: string }
-    expect(body.code).toBe('invalid_argument')
+    expect(body.code).toBe('validation_error')
   })
 
   it('rejects empty checks array at the validation boundary', async () => {
@@ -162,6 +162,6 @@ describeIfDb('POST /stores/:storeId/batch-check', () => {
     const res = await app.fetch(batchCheck(storeId, { checks: [] }))
     expect(res.status).toBe(400)
     const body = await res.json() as { code: string }
-    expect(body.code).toBe('invalid_argument')
+    expect(body.code).toBe('validation_error')
   })
 })

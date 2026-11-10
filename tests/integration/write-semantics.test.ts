@@ -77,7 +77,7 @@ describeIfDb('write endpoint semantics', () => {
 
     expect(res.status).toBe(400)
     expect(await res.json()).toEqual({
-      code: 'invalid_argument',
+      code: 'validation_error',
       message: 'relation "editor" is not defined for type "doc"',
     })
   })
