@@ -60,6 +60,12 @@ work without surprising the schema with empty strings.
 | `OPENFGA_IDEMPOTENCY_MODE` | `idempotency.mode` | `off` / `optional` / `required` |
 | `OPENFGA_IDEMPOTENCY_TTL_MS` | `idempotency.ttlMs` | Replay window, ms. Default 86400000. |
 
+## Write fences (extension)
+
+| Env var | Config path | Notes |
+|---|---|---|
+| `OPENFGA_WRITE_FENCES_ENABLED` | `writeFences.enabled` | Boolean, default `false`. Enables the non-upstream durable write-fence extension (`PUT /x-ext/stores/{store_id}/write-fences/{key}` and fence headers on Write). Off keeps the API identical to upstream OpenFGA. |
+
 ## OpenTelemetry
 
 | Env var | Config path | Notes |

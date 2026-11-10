@@ -155,6 +155,7 @@ Each existing `OPENFGA_*` env var maps to a nested config path. After c12 loads 
 | `OPENFGA_AUTH_PRESHARED_KEYS` | `auth.presharedKeys` | comma-string → string[] (drops empty entries) |
 | `OPENFGA_IDEMPOTENCY_MODE` | `idempotency.mode` | enum `off\|optional\|required` |
 | `OPENFGA_IDEMPOTENCY_TTL_MS` | `idempotency.ttlMs` | **positive** int (matches current parser at `src/middleware/idempotency.ts:82-87`; `0` and negatives are fatal) |
+| `OPENFGA_WRITE_FENCES_ENABLED` | `writeFences.enabled` | strict-bool (default `false`); optional write-fence extension, see `docs/features/write-fences.md` |
 | `OPENFGA_AUTH_OIDC_JWKS_CACHE_MAX_AGE_MS` | `auth.oidc.jwksCacheMaxAgeMs` | non-negative int (default 600000); see `docs/features/oidc-auth.md` |
 | `OPENFGA_AUTH_OIDC_JWKS_COOLDOWN_MS` | `auth.oidc.jwksCooldownMs` | non-negative int (default 30000); see `docs/features/oidc-auth.md` |
 | `OPENFGA_OTEL_EXPORTER_HEADERS` | `otel.exporter.headers` | OTel key=value list (below) |

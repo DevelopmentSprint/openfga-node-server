@@ -28,7 +28,7 @@ typed wildcards, computed relations, tuple-to-userset traversal, unions,
 intersections, and differences. Standard model-defined conditional tuples are supported; experimental dynamic conditions are not.
 See the [condition contract and evaluation limits](docs/features/conditional-tuples.md).
 
-Lease-based writers can use the optional [durable write-fence extension](docs/features/write-fences.md) to prevent superseded generations from mutating tuples.
+Lease-based writers can opt into the [durable write-fence extension](docs/features/write-fences.md) (off by default; `OPENFGA_WRITE_FENCES_ENABLED=true`) to prevent superseded generations from mutating tuples. While it is off, the API surface is identical to upstream OpenFGA.
 
 The repository's [SDK integration tests](tests/integration/sdk-conformance.test.ts)
 exercise implemented endpoints through the official `@openfga/sdk` client over
