@@ -117,7 +117,7 @@ describeIfDb('POST /stores/:storeId/batch-check', () => {
     expect(json.result['ctx-no']).toEqual({ allowed: false })
   })
 
-  it('returns 404 when the requested authorization_model_id does not exist', async () => {
+  it('returns 400 when the requested authorization_model_id does not exist', async () => {
     const { app, storeId } = await setup()
     const res = await app.fetch(batchCheck(storeId, {
       authorization_model_id: '01ZZZZZZZZZZZZZZZZZZZZZZZZ',
@@ -125,7 +125,7 @@ describeIfDb('POST /stores/:storeId/batch-check', () => {
         { tuple_key: { user: 'user:alice', relation: 'viewer', object: 'doc:1' }, correlation_id: 'x' },
       ],
     }))
-    expect(res.status).toBe(404)
+    expect(res.status).toBe(400)
     const body = await res.json() as { code: string }
     expect(body.code).toBe('authorization_model_not_found')
   })
