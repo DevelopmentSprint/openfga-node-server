@@ -51,7 +51,6 @@ jobs:
         env:
           UPDATE_TYPE: ${{ steps.meta.outputs.update-type }}
           DEPENDENCY_TYPE: ${{ steps.meta.outputs.dependency-type }}
-          ALERT_STATE: ${{ steps.meta.outputs.alert-state }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
@@ -69,22 +68,12 @@ jobs:
             eligible_reason="minor on direct:development"
           fi
 
-          # Security override: blocks auto-merge when the PR is a security
-          # update AND the update-type is NOT patch. Security patches still
-          # auto-merge via the eligibility check above.
-          security_block=false
-          if [ -n "$ALERT_STATE" ] && [ "$UPDATE_TYPE" != "version-update:semver-patch" ]; then
-            security_block=true
-          fi
-
-          if [ "$eligible" = "true" ] && [ "$security_block" = "false" ]; then
+          if [ "$eligible" = "true" ]; then
             decision="auto-merge"
             reason="$eligible_reason"
           else
             decision="skip"
-            if [ "$security_block" = "true" ]; then
-              reason="security override (non-patch security update)"
-            elif [ "$UPDATE_TYPE" = "version-update:semver-major" ]; then
+            if [ "$UPDATE_TYPE" = "version-update:semver-major" ]; then
               reason="major bump"
             elif [ "$UPDATE_TYPE" = "version-update:semver-minor" ]; then
               reason="minor on ${DEPENDENCY_TYPE:-unknown}"
@@ -94,7 +83,7 @@ jobs:
           fi
 
           # Structured single-line log for grep-ability.
-          echo "::notice::dep-automerge pr=$PR_NUMBER decision=$decision reason=\"$reason\" update-type=$UPDATE_TYPE dependency-type=$DEPENDENCY_TYPE security=${ALERT_STATE:-none}"
+          echo "::notice::dep-automerge pr=$PR_NUMBER decision=$decision reason=\"$reason\" update-type=$UPDATE_TYPE dependency-type=$DEPENDENCY_TYPE"
 
           echo "decision=$decision" >> "$GITHUB_OUTPUT"
           echo "reason=$reason" >> "$GITHUB_OUTPUT"
