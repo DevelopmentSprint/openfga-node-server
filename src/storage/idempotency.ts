@@ -26,7 +26,8 @@
  *     replay it.
  *
  *   - `releaseKey` removes an in-flight row when the handler errored
- *     (5xx or thrown exception) so the client can retry cleanly.
+ *     (non-2xx response or thrown exception) so the client can retry
+ *     cleanly. Only 2xx responses are recorded (openfga-k2a.14).
  *
  * Claim ownership (openfga-k2a.3):
  *
@@ -36,15 +37,14 @@
  *   AND carries the caller's claim token. A stale owner's writes are
  *   no-ops and report `false`.
  *
- *   The token lives in `response_status` while the row is in flight.
- *   That column is otherwise NULL until completion, when it is
- *   overwritten with the HTTP status, so no schema change is needed.
- *   Tokens are random negative 31-bit integers: they fit Postgres
- *   `integer` and SQLite `INTEGER`, compare exactly on both engines,
- *   and can never be mistaken for an HTTP status. A replay is only
- *   produced for `completed` rows, so the token is never served.
+ *   The token lives in its own nullable `claim_token` column
+ *   (openfga-k2a.14; previously a negative integer overloaded onto
+ *   `response_status`). It is a random UUID set on claim and cleared
+ *   on completion, so `response_status` only ever holds a real HTTP
+ *   status. A replay is only produced for `completed` rows, so the
+ *   token is never served.
  */
-import { randomInt } from 'node:crypto'
+import { randomUUID } from 'node:crypto'
 import { sql } from 'kysely'
 import { getDb, getDialect } from './db'
 import { dialectNow, dialectNowMinus } from './dialect'
@@ -58,11 +58,8 @@ import { dialectNow, dialectNowMinus } from './dialect'
  */
 export const IN_FLIGHT_LEASE_MS = 5 * 60_000
 
-/** Largest claim-token magnitude: Postgres `integer` is int4. */
-const MAX_CLAIM_TOKEN = 2 ** 31 - 1
-
 export type ClaimResult =
-  | { kind: 'claimed', token: number }
+  | { kind: 'claimed', token: string }
   | { kind: 'in_flight' }
   | { kind: 'mismatch' }
   | { kind: 'replay', status: number, body: unknown }
@@ -72,8 +69,8 @@ export interface ClaimOptions {
   inFlightLeaseMs?: number
 }
 
-function newClaimToken(): number {
-  return -randomInt(1, MAX_CLAIM_TOKEN)
+function newClaimToken(): string {
+  return randomUUID()
 }
 
 /**
@@ -85,7 +82,7 @@ function newClaimToken(): number {
  *
  * Returns:
  *   - 'claimed' — the caller owns the slot and must follow up with
- *     `completeKey` (success / 4xx) or `releaseKey` (5xx / thrown),
+ *     `completeKey` (2xx) or `releaseKey` (non-2xx / thrown),
  *     passing the returned `token`.
  *   - 'in_flight' — a concurrent request holds the slot. Caller
  *     should respond 409.
@@ -164,7 +161,7 @@ async function claimWithDb(
   const token = newClaimToken()
   const insertResult = await db
     .insertInto('idempotency_keys')
-    .values({ key, request_hash: fingerprint, status: 'in_flight', response_status: token })
+    .values({ key, request_hash: fingerprint, status: 'in_flight', claim_token: token })
     .onConflict(oc => oc.column('key').doNothing())
     .returning('key')
     .executeTakeFirst()
@@ -205,7 +202,7 @@ async function claimWithDb(
  */
 export async function completeKey(
   key: string,
-  token: number,
+  token: string,
   status: number,
   body: unknown,
 ): Promise<boolean> {
@@ -214,6 +211,7 @@ export async function completeKey(
     .set({
       status: 'completed',
       response_status: status,
+      claim_token: null,
       // JSON column insert/update type is `string | null` per the
       // ColumnType deviation documented in db-schema.ts; the caller
       // hands us an arbitrary value, we stringify (or null when
@@ -223,7 +221,7 @@ export async function completeKey(
     })
     .where('key', '=', key)
     .where('status', '=', 'in_flight')
-    .where('response_status', '=', token)
+    .where('claim_token', '=', token)
     .executeTakeFirst()
   return Number(result.numUpdatedRows) > 0
 }
@@ -234,12 +232,12 @@ export async function completeKey(
  * a stale owner can never delete the new owner's row or a completed
  * record.
  */
-export async function releaseKey(key: string, token: number): Promise<boolean> {
+export async function releaseKey(key: string, token: string): Promise<boolean> {
   const result = await getDb()
     .deleteFrom('idempotency_keys')
     .where('key', '=', key)
     .where('status', '=', 'in_flight')
-    .where('response_status', '=', token)
+    .where('claim_token', '=', token)
     .executeTakeFirst()
   return Number(result.numDeletedRows) > 0
 }

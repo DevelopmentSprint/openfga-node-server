@@ -25,6 +25,7 @@ import * as tupleChangeSeq from '../../migrations/1778083200000_tuple-change-seq
 
 import * as tupleConditions from '../../migrations/1793012400000_tuple-conditions'
 import * as readAndModelIndexes from '../../migrations/1794300100000_read-and-model-indexes'
+import * as idempotencyClaimToken from '../../migrations/1794400000000_idempotency-claim-token'
 
 export const MIGRATIONS: Record<string, Migration> = {
   '1777680000000_initial-openfga-schema': initialSchema,
@@ -34,6 +35,7 @@ export const MIGRATIONS: Record<string, Migration> = {
   '1778083200000_tuple-change-seq': tupleChangeSeq,
   '1793012400000_tuple-conditions': tupleConditions,
   '1794300100000_read-and-model-indexes': readAndModelIndexes,
+  '1794400000000_idempotency-claim-token': idempotencyClaimToken,
 }
 
 export class StaticMigrationProvider implements MigrationProvider {

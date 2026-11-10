@@ -34,7 +34,7 @@ function uniqueKey(label: string): string {
   return `idem-${label}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }
 
-function tokenOf(result: ClaimResult): number {
+function tokenOf(result: ClaimResult): string {
   if (result.kind !== 'claimed') throw new Error(`expected claimed, got ${result.kind}`)
   return result.token
 }
