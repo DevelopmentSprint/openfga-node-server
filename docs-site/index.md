@@ -22,7 +22,7 @@ hero:
 features:
   - icon: 🌐
     title: Runs anywhere Node runs
-    details: Vercel, Fly, Cloud Run, bare metal, containers, embedded — anywhere a Node 22 process can bind sockets. No Go binary required.
+    details: Serverless platforms, Fly, Cloud Run, bare metal, containers, embedded — anywhere a Node 22 process can bind sockets. No Go binary required.
   - icon: 🗄️
     title: Postgres or SQLite
     details: Production-grade Postgres with a Kysely-typed query layer, or embedded SQLite for tests and small deployments. Dialect inferred from `OPENFGA_DB_URL`.
@@ -48,7 +48,7 @@ features:
 
 ## Why NodeFGA
 
-A relationship-based authorization service that lives inside your Node stack. No Go sidecar to operate, no managed-service onboarding, no separate runtime to monitor. Deploy it like any other Node service — Vercel, Fly, Cloud Run, a Kubernetes pod, a bare-metal VM — and check permissions against your authorization model from your application code over plain HTTP.
+A relationship-based authorization service that lives inside your Node stack. No Go sidecar to operate, no managed-service onboarding, no separate runtime to monitor. Deploy it like any other Node service — a serverless platform, Fly, Cloud Run, a Kubernetes pod, a bare-metal VM — and check permissions against your authorization model from your application code over plain HTTP.
 
 NodeFGA implements the OpenFGA model for supported authorization features, using the `.fga` modeling language and relationship tuples. Project-owned integration tests exercise implemented endpoints through the official `@openfga/sdk` client. Upstream OpenFGA conformance has not been verified, and standard model-defined conditional tuples are supported, with documented evaluation limits. See [compatibility evidence](/guide/getting-started#compatibility-evidence).
 
