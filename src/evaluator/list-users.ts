@@ -18,9 +18,13 @@
  *   - `tupleToUserset`    listUsersForRelation(tupleset) for parent
  *                         refs, then recurse into `computedUserset`
  *                         on each parent
- *   - `union`             set-union of children
- *   - `intersection`      set-intersection of children
- *   - `difference`        base set minus subtract set
+ *   - `union`, `intersection`, `difference`
+ *                         union of every child (a superset); Check
+ *                         applies the real set algebra per candidate
+ *
+ * Candidates are confirmed with Check (shared per-request memo). Limits
+ * follow upstream defaults: at most LIST_USERS_MAX_RESULTS users, and
+ * the results found so far once LIST_USERS_DEADLINE_MS passes.
  *
  * Returns `null` when the relation is undefined on the type so the
  * route can surface a clean 400.
@@ -28,7 +32,9 @@
 import type { Userset, User, UserTypeFilter } from '@openfga/sdk'
 import type { ModelIndex } from './model-index'
 import type { TupleStore } from './tuple-store'
-import { check } from './check'
+import { CheckResolver } from './check'
+import { DeadlineExceededError, LIST_USERS_DEADLINE_MS, LIST_USERS_MAX_RESULTS } from './limits'
+import type { LimitOverrides } from './limits'
 
 export async function listUsers(
   model: ModelIndex,
@@ -38,142 +44,112 @@ export async function listUsers(
   relation: string,
   userFilter: UserTypeFilter,
   context: Record<string, unknown> = {},
+  limits: LimitOverrides = {},
 ): Promise<User[] | null> {
   if (!model.getRelation(objectType, relation)) return null
-  const reachable = await gatherForRelation(model, store, objectType, objectId, relation, new Set())
+  const maxResults = limits.maxResults ?? LIST_USERS_MAX_RESULTS
+  const resolver = new CheckResolver(model, store, context, {
+    deadlineMs: limits.deadlineMs ?? LIST_USERS_DEADLINE_MS,
+    nodeBudget: limits.nodeBudget,
+  })
   const out: User[] = []
-  for (const candidate of reachable) {
-    const user = toUser(candidate)
-    if (matchesFilter(user, userFilter) && await check(model, store, candidate, relation, `${objectType}:${objectId}`, context)) out.push(user)
+  try {
+    const reachable = new Set<string>()
+    await visit(model, store, resolver, objectType, objectId, relation, new Set(), reachable)
+    for (const candidate of reachable) {
+      if (maxResults > 0 && out.length >= maxResults) break
+      const user = toUser(candidate)
+      if (matchesFilter(user, userFilter) && await resolver.check(candidate, relation, `${objectType}:${objectId}`)) out.push(user)
+    }
+  }
+  catch (error) {
+    // Upstream returns the results found within the deadline.
+    if (!(error instanceof DeadlineExceededError)) throw error
   }
   return out
 }
 
-async function gather(
+/**
+ * Every rewrite operator gathers a superset (Check filters per
+ * candidate), so the candidate set is simply the union of the users and
+ * userset nodes reachable from the root. A node-level visited set makes
+ * each (object, relation) expand once, so diamonds and cycles cost
+ * O(nodes) instead of O(paths).
+ */
+async function visit(
   model: ModelIndex,
   store: TupleStore,
+  resolver: CheckResolver,
+  objectType: string,
+  objectId: string,
+  relation: string,
+  visited: Set<string>,
+  out: Set<string>,
+): Promise<void> {
+  const key = `${objectType}:${objectId}#${relation}`
+  if (visited.has(key)) return
+  visited.add(key)
+  // Upstream ListUsers emits every expanded userset that matches the filter.
+  out.add(key)
+  const def = model.getRelation(objectType, relation)
+  if (!def) return
+  resolver.checkDeadline()
+  await walk(model, store, resolver, objectType, objectId, relation, def.rewrite, visited, out)
+}
+
+async function walk(
+  model: ModelIndex,
+  store: TupleStore,
+  resolver: CheckResolver,
   objectType: string,
   objectId: string,
   relation: string,
   rewrite: Userset,
   visited: Set<string>,
-): Promise<Set<string>> {
-  // Note: cycle detection lives in gatherForRelation, not here. Union /
-  // intersection / difference children recurse with the SAME
-  // (objectType, objectId, relation) but a different child rewrite —
-  // those are subtrees of the same node, not new visit edges. Putting
-  // the visit check at this layer would short-circuit those legitimate
-  // recursions.
+  out: Set<string>,
+): Promise<void> {
   if (rewrite.this !== undefined) {
-    const users = await store.listUsersForRelation(objectType, objectId, relation)
-    const out = new Set<string>()
-    for (const u of users) {
-      // Always include the raw user_str so userset and wildcard
-      // filters (e.g. user_filters: [{type: 'group', relation:
-      // 'member'}]) still find their match shapes.
+    for (const u of await store.listUsersForRelation(objectType, objectId, relation)) {
+      // Keep the raw user_str so userset and wildcard filters match, and
+      // expand userset references so filters on the underlying user type
+      // surface concrete members (openfga-6e6).
       out.add(u)
-      // OpenFGA ListUsers expands userset references when the
-      // requested filter targets the underlying user type. So for
-      // a tuple like (doc:1, viewer, group:eng#member), a request
-      // with user_filters: [{type: 'user'}] should return the
-      // concrete users members of group:eng — not nothing. Recurse
-      // into the referenced (type, id, relation) and merge its
-      // users into the gather set; matchesFilter at the call site
-      // picks the right shape based on the filter. See openfga-6e6.
-      const hashIdx = u.indexOf('#')
-      if (hashIdx > 0) {
-        const left = u.slice(0, hashIdx)
-        const usRelation = u.slice(hashIdx + 1)
-        const colonIdx = left.indexOf(':')
-        if (colonIdx > 0) {
-          const usType = left.slice(0, colonIdx)
-          const usId = left.slice(colonIdx + 1)
-          // Skip if the referenced object is itself a wildcard
-          // (`group:*#member` is unusual but defensively guarded).
-          if (usId !== '*' && usId.length > 0) {
-            const expanded = await gatherForRelation(
-              model,
-              store,
-              usType,
-              usId,
-              usRelation,
-              visited,
-            )
-            for (const e of expanded) out.add(e)
-          }
-        }
-      }
+      const ref = parseUserset(u)
+      if (ref && ref.id !== '*' && ref.id.length > 0) await visit(model, store, resolver, ref.type, ref.id, ref.relation, visited, out)
     }
-    return out
+    return
   }
-
   if (rewrite.computedUserset?.relation) {
-    return gatherForRelation(model, store, objectType, objectId, rewrite.computedUserset.relation, visited)
+    await visit(model, store, resolver, objectType, objectId, rewrite.computedUserset.relation, visited, out)
+    return
   }
-
   if (rewrite.tupleToUserset) {
     const tuplesetRel = rewrite.tupleToUserset.tupleset?.relation
     const computedRel = rewrite.tupleToUserset.computedUserset?.relation
-    if (!tuplesetRel || !computedRel) return new Set()
-    const parents = await store.listUsersForRelation(objectType, objectId, tuplesetRel)
-    const out = new Set<string>()
-    for (const parent of parents) {
-      // Skip wildcards/usersets — tupleset refs must be concrete objects.
+    if (!tuplesetRel || !computedRel) return
+    for (const parent of await store.listUsersForRelation(objectType, objectId, tuplesetRel)) {
+      // Tupleset refs must be concrete objects.
       if (parent.endsWith(':*') || parent.includes('#')) continue
       const idx = parent.indexOf(':')
       if (idx <= 0) continue
-      const [pt, pid] = [parent.slice(0, idx), parent.slice(idx + 1)]
-      const childUsers = await gatherForRelation(model, store, pt, pid, computedRel, visited)
-      for (const u of childUsers) out.add(u)
+      await visit(model, store, resolver, parent.slice(0, idx), parent.slice(idx + 1), computedRel, visited, out)
     }
-    return out
+    return
   }
-
-  if (rewrite.union) {
-    const out = new Set<string>()
-    for (const child of rewrite.union.child ?? []) {
-      const childUsers = await gather(model, store, objectType, objectId, relation, child, new Set(visited))
-      for (const u of childUsers) out.add(u)
-    }
-    return out
-  }
-
-  if (rewrite.intersection) {
-    // Gather a superset; Check applies intersection and conditions per candidate.
-    const out = new Set<string>()
-    for (const child of rewrite.intersection.child ?? []) {
-      for (const user of await gather(model, store, objectType, objectId, relation, child, new Set(visited))) out.add(user)
-    }
-    return out
-  }
-  if (rewrite.difference?.base) {
-    // Exclusions can become grants when nested under another difference.
-    // Keep their concrete candidates; Check decides membership at the root.
-    const base = await gather(model, store, objectType, objectId, relation, rewrite.difference.base, new Set(visited))
-    const subtract = await gather(model, store, objectType, objectId, relation, rewrite.difference.subtract!, new Set(visited))
-    return new Set([...base, ...subtract])
-  }
-
-  return new Set()
+  // Union, intersection and both sides of a difference contribute
+  // candidates: exclusions can become grants under a nested difference.
+  const children = rewrite.union?.child ?? rewrite.intersection?.child
+    ?? (rewrite.difference ? [rewrite.difference.base, rewrite.difference.subtract].filter(c => c !== undefined) : [])
+  for (const child of children) await walk(model, store, resolver, objectType, objectId, relation, child, visited, out)
 }
 
-async function gatherForRelation(
-  model: ModelIndex,
-  store: TupleStore,
-  objectType: string,
-  objectId: string,
-  relation: string,
-  visited: Set<string>,
-): Promise<Set<string>> {
-  const visitKey = `${objectType}:${objectId}#${relation}`
-  if (visited.has(visitKey)) return new Set()
-  const def = model.getRelation(objectType, relation)
-  if (!def) return new Set()
-  const next = new Set(visited)
-  next.add(visitKey)
-  const users = await gather(model, store, objectType, objectId, relation, def.rewrite, next)
-  users.add(visitKey)
-  return users
+function parseUserset(u: string): { type: string, id: string, relation: string } | null {
+  const hashIdx = u.indexOf('#')
+  if (hashIdx <= 0) return null
+  const left = u.slice(0, hashIdx)
+  const colonIdx = left.indexOf(':')
+  if (colonIdx <= 0) return null
+  return { type: left.slice(0, colonIdx), id: left.slice(colonIdx + 1), relation: u.slice(hashIdx + 1) }
 }
 
 function toUser(userStr: string): User {
