@@ -16,6 +16,7 @@ import {
   applyTupleMutations,
   listChangesPage,
   readTuplesPage,
+  StoreNotFoundError,
   type ReadTupleCursor,
   type TupleConflictMode,
 } from '../storage/tuples'
@@ -67,6 +68,11 @@ tuplesRoutes.post('/stores/:storeId/write', validate('json', WriteBody), async (
   catch (err) {
     if (err instanceof DuplicateTupleError || err instanceof MissingTupleError) {
       return c.json({ code: 'write_failed_due_to_invalid_input', message: err.message }, 400)
+    }
+    // requireStore checked the store before the transaction; this
+    // covers a deleteStore that commits in between.
+    if (err instanceof StoreNotFoundError) {
+      return c.json({ code: 'store_id_not_found', message: err.message }, 404)
     }
     throw err
   }
