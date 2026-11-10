@@ -39,6 +39,12 @@ export interface AuthorizationModelTable {
     conditions?: { [k: string]: Condition }
   }>
   created_at: Generated<string>
+  // Monotonic write-order sequence (migration 1794400100000, openfga-k2a.16).
+  // Assigned by the database (identity sequence on Postgres, trigger on
+  // SQLite); never supplied by the application. Used to pick the latest
+  // model independent of ULID/clock skew. bigint comes back as a string on
+  // Postgres and a number on SQLite, so it is only used in ORDER BY.
+  seq: Generated<string | number>
 }
 
 export interface TupleTable {
