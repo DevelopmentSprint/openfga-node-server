@@ -96,6 +96,17 @@ These are used only by `pnpm load-model`, not by the server runtime.
 | `OPENFGA_STORE_NAME` | `loadModel.storeName` | Used when creating a new store. |
 | `OPENFGA_STORE_ID` | `loadModel.storeId` | Pin to an existing store id. |
 
+## Batch check
+
+| Env var | Config path | Notes |
+|---|---|---|
+| `OPENFGA_MAX_CHECKS_PER_BATCH_CHECK` | `maxChecksPerBatchCheck` | Maximum `checks` per `batch-check` request. Positive integer within uint32. Default 50. |
+
+A request over the limit, or one that repeats a `correlation_id`, is
+rejected with `400 validation_error`. Each `correlation_id` must be
+unique within the request and 1 to 36 characters of ASCII letters,
+digits, underscore or hyphen.
+
 ## Bootstrap
 
 | Env var | Config path | Notes |

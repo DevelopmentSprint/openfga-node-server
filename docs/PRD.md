@@ -4,7 +4,7 @@
 
 The OpenFGA ecosystem has the upstream Go reference server, the cloud
 hosted offering (Auth0 FGA / openfga.cloud), and not much else for
-Node. Many serverless deployment targets (Vercel, Cloud Run as a
+Node. Many serverless deployment targets (serverless platforms, Cloud Run as a
 single image, smaller PaaS platforms) cannot run the Go binary
 natively as a sidecar, and the managed offerings aren't always the
 right shape (cost, data residency, latency, vendor preference).

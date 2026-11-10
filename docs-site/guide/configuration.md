@@ -76,6 +76,7 @@ otel:              # OpenTelemetry tracing — off by default
   # …
 
 migrateOnStart: false
+maxChecksPerBatchCheck: 50   # max checks per batch-check request
 ```
 
 ## Per-environment overrides
