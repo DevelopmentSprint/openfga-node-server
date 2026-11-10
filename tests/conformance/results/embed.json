@@ -1,0 +1,1 @@
+{"model":201,"write":200,"checks":2000,"allowedCount":40,"p50_ms":0.076,"p95_ms":0.178,"p99_ms":0.358,"backend":":memory:"}

@@ -1,0 +1,842 @@
+{
+ "a_modular_models": {
+  "title": "Modular models: two modules in one store, a module referencing a type owned by another, extend type",
+  "agree": true,
+  "diffs": {},
+  "nodefga": {
+   "write_composed_1_2": {
+    "status": 201
+   },
+   "tuples": 200,
+   "check_via_extension": true,
+   "check_negative": false,
+   "list_objects": [
+    "document:d1"
+   ],
+   "read_back": {
+    "schema_version": "1.2",
+    "document_module": "docs",
+    "document_source_file": "docs.fga",
+    "org_extension_relation_module": "docs"
+   },
+   "write_flattened_1_1": {
+    "status": 201
+   }
+  },
+  "reference": {
+   "write_composed_1_2": {
+    "status": 201
+   },
+   "tuples": 200,
+   "check_via_extension": true,
+   "check_negative": false,
+   "list_objects": [
+    "document:d1"
+   ],
+   "read_back": {
+    "schema_version": "1.2",
+    "document_module": "docs",
+    "document_source_file": "docs.fga",
+    "org_extension_relation_module": "docs"
+   },
+   "write_flattened_1_1": {
+    "status": 201
+   }
+  }
+ },
+ "b_cel_conditions": {
+  "title": "CEL conditions: timestamp comparison with request-supplied facts, map parameter, stored/request context merge",
+  "agree": true,
+  "diffs": {},
+  "nodefga": {
+   "model": 201,
+   "tuples": 200,
+   "before_expiry": true,
+   "after_expiry": false,
+   "at_expiry_boundary": false,
+   "missing_request_context": "400:validation_error",
+   "bad_timestamp_literal": "400:validation_error",
+   "map_gold_before": true,
+   "map_wrong_tier": false,
+   "map_after": false,
+   "map_missing_key": "400:validation_error",
+   "stored_context_wins_over_request": true,
+   "list_objects_valid": [
+    "workspace:w1"
+   ],
+   "list_objects_expired": [],
+   "list_users_valid": [
+    "anne",
+    "cy"
+   ],
+   "batch_check": {
+    "a": true,
+    "b": false
+   }
+  },
+  "reference": {
+   "model": 201,
+   "tuples": 200,
+   "before_expiry": true,
+   "after_expiry": false,
+   "at_expiry_boundary": false,
+   "missing_request_context": "400:validation_error",
+   "bad_timestamp_literal": "400:validation_error",
+   "map_gold_before": true,
+   "map_wrong_tier": false,
+   "map_after": false,
+   "map_missing_key": "400:validation_error",
+   "stored_context_wins_over_request": true,
+   "list_objects_valid": [
+    "workspace:w1"
+   ],
+   "list_objects_expired": [],
+   "list_users_valid": [
+    "anne",
+    "cy"
+   ],
+   "batch_check": {
+    "a": true,
+    "b": false
+   }
+  }
+ },
+ "b2_grant_shape": {
+  "title": "CEL grant shape: map<bool> lookup (`in` and index), timestamp expiry, facts in request context, HIGHER_CONSISTENCY",
+  "agree": true,
+  "diffs": {},
+  "nodefga": {
+   "model": {
+    "status": 201
+   },
+   "tuples": 200,
+   "admin_via_tenant_edge": true,
+   "maintainer_can_edit": true,
+   "revoked_grant_version": false,
+   "grant_version_absent_from_map": false,
+   "expired": false,
+   "tenant_inactive": false,
+   "project_inactive_blocks_project_grant": false,
+   "project_inactive_does_not_block_tenant_path": true,
+   "missing_context_key": "400:validation_error",
+   "wrong_type_for_map_value": "400:validation_error",
+   "list_objects": [
+    "project:p1"
+   ],
+   "list_objects_expired": [],
+   "batch_check": {
+    "expired": false,
+    "ok": true,
+    "revoked": false
+   }
+  },
+  "reference": {
+   "model": {
+    "status": 201
+   },
+   "tuples": 200,
+   "admin_via_tenant_edge": true,
+   "maintainer_can_edit": true,
+   "revoked_grant_version": false,
+   "grant_version_absent_from_map": false,
+   "expired": false,
+   "tenant_inactive": false,
+   "project_inactive_blocks_project_grant": false,
+   "project_inactive_does_not_block_tenant_path": true,
+   "missing_context_key": "400:validation_error",
+   "wrong_type_for_map_value": "400:validation_error",
+   "list_objects": [
+    "project:p1"
+   ],
+   "list_objects_expired": [],
+   "batch_check": {
+    "expired": false,
+    "ok": true,
+    "revoked": false
+   }
+  }
+ },
+ "c_contextual_tuples": {
+  "title": "Contextual tuples on Check and ListObjects (grant, override of stored, validation, 100-tuple limit)",
+  "agree": false,
+  "diffs": {
+   "check_invalid_relation": {
+    "nodefga": {
+     "status": 400,
+     "code": "validation_error"
+    },
+    "reference": {
+     "status": 400,
+     "code": "invalid_tuple"
+    }
+   },
+   "check_invalid_type": {
+    "nodefga": {
+     "status": 400,
+     "code": "validation_error"
+    },
+    "reference": {
+     "status": 400,
+     "code": "invalid_tuple"
+    }
+   }
+  },
+  "nodefga": {
+   "check_without": false,
+   "check_with_direct": true,
+   "check_with_userset": true,
+   "check_not_persisted": false,
+   "check_stored_still_visible": true,
+   "check_invalid_relation": {
+    "status": 400,
+    "code": "validation_error"
+   },
+   "check_invalid_type": {
+    "status": 400,
+    "code": "validation_error"
+   },
+   "check_duplicate_in_request": {
+    "status": 200
+   },
+   "list_objects_with": [
+    "doc:a",
+    "doc:b"
+   ],
+   "list_objects_without": [],
+   "check_101_contextual": {
+    "status": 400,
+    "code": "validation_error"
+   },
+   "check_100_contextual": true
+  },
+  "reference": {
+   "check_without": false,
+   "check_with_direct": true,
+   "check_with_userset": true,
+   "check_not_persisted": false,
+   "check_stored_still_visible": true,
+   "check_invalid_relation": {
+    "status": 400,
+    "code": "invalid_tuple"
+   },
+   "check_invalid_type": {
+    "status": 400,
+    "code": "invalid_tuple"
+   },
+   "check_duplicate_in_request": {
+    "status": 200
+   },
+   "list_objects_with": [
+    "doc:a",
+    "doc:b"
+   ],
+   "list_objects_without": [],
+   "check_101_contextual": {
+    "status": 400,
+    "code": "validation_error"
+   },
+   "check_100_contextual": true
+  }
+ },
+ "d_read_changes": {
+  "title": "ReadChanges: ordering, pagination, continuation tokens, filter, and tailing under concurrent writes",
+  "agree": false,
+  "diffs": {
+   "tailing_reader_seen": {
+    "nodefga": 320,
+    "reference": 318
+   },
+   "tailing_reader_unique": {
+    "nodefga": 320,
+    "reference": 318
+   },
+   "tailing_missed_vs_full": {
+    "nodefga": 0,
+    "reference": 2
+   },
+   "tailing_order_equals_full_order": {
+    "nodefga": true,
+    "reference": false
+   },
+   "full_read_timestamps_nondecreasing": {
+    "nodefga": true,
+    "reference": false
+   },
+   "page_size_0": {
+    "nodefga": {
+     "status": 200
+    },
+    "reference": {
+     "status": 400,
+     "code": "validation_error"
+    }
+   },
+   "page_size_101": {
+    "nodefga": {
+     "status": 200
+    },
+    "reference": {
+     "status": 400,
+     "code": "page_size_invalid"
+    }
+   },
+   "page_size_1000": {
+    "nodefga": {
+     "status": 200
+    },
+    "reference": {
+     "status": 400,
+     "code": "page_size_invalid"
+    }
+   }
+  },
+  "nodefga": {
+   "total_written": 320,
+   "full_read_count": 320,
+   "full_read_unique": 320,
+   "tailing_reader_seen": 320,
+   "tailing_reader_unique": 320,
+   "tailing_missed_vs_full": 0,
+   "tailing_duplicates": 0,
+   "tailing_order_equals_full_order": true,
+   "full_read_timestamps_nondecreasing": true,
+   "full_read_page_sizes_head": [
+    50,
+    50,
+    50
+   ],
+   "per_writer_order_preserved": true,
+   "empty_page_after_tail": {
+    "status": 200,
+    "count": 0,
+    "token_returned": true
+   },
+   "token_resumes_with_new_write": {
+    "status": 200,
+    "keys": [
+     "doc:late"
+    ]
+   },
+   "bad_token": {
+    "status": 400,
+    "code": "invalid_continuation_token"
+   },
+   "page_size_0": {
+    "status": 200
+   },
+   "page_size_101": {
+    "status": 200
+   },
+   "page_size_1000": {
+    "status": 200
+   },
+   "type_filter_other": {
+    "status": 200,
+    "count": 0
+   },
+   "type_filter_doc_count": 100,
+   "delete_recorded_as": [
+    "TUPLE_OPERATION_DELETE"
+   ],
+   "token_with_different_type_filter": {
+    "status": 400,
+    "code": "query_string_type_continuation_token_mismatch"
+   }
+  },
+  "reference": {
+   "total_written": 320,
+   "full_read_count": 320,
+   "full_read_unique": 320,
+   "tailing_reader_seen": 318,
+   "tailing_reader_unique": 318,
+   "tailing_missed_vs_full": 2,
+   "tailing_duplicates": 0,
+   "tailing_order_equals_full_order": false,
+   "full_read_timestamps_nondecreasing": false,
+   "full_read_page_sizes_head": [
+    50,
+    50,
+    50
+   ],
+   "per_writer_order_preserved": true,
+   "empty_page_after_tail": {
+    "status": 200,
+    "count": 0,
+    "token_returned": true
+   },
+   "token_resumes_with_new_write": {
+    "status": 200,
+    "keys": [
+     "doc:late"
+    ]
+   },
+   "bad_token": {
+    "status": 400,
+    "code": "invalid_continuation_token"
+   },
+   "page_size_0": {
+    "status": 400,
+    "code": "validation_error"
+   },
+   "page_size_101": {
+    "status": 400,
+    "code": "page_size_invalid"
+   },
+   "page_size_1000": {
+    "status": 400,
+    "code": "page_size_invalid"
+   },
+   "type_filter_other": {
+    "status": 200,
+    "count": 0
+   },
+   "type_filter_doc_count": 100,
+   "delete_recorded_as": [
+    "TUPLE_OPERATION_DELETE"
+   ],
+   "token_with_different_type_filter": {
+    "status": 400,
+    "code": "query_string_type_continuation_token_mismatch"
+   }
+  }
+ },
+ "e_consistency": {
+  "title": "Consistency option on Check, BatchCheck, ListObjects, ListUsers, Read, Expand",
+  "agree": false,
+  "diffs": {
+   "check_BOGUS": {
+    "nodefga": "400:validation_error",
+    "reference": true
+   },
+   "batch_BOGUS": {
+    "nodefga": {
+     "status": 400,
+     "code": "validation_error"
+    },
+    "reference": true
+   },
+   "listobjects_BOGUS": {
+    "nodefga": {
+     "status": 400,
+     "code": "validation_error"
+    },
+    "reference": [
+     "doc:1"
+    ]
+   },
+   "listusers_BOGUS": {
+    "nodefga": {
+     "status": 400,
+     "code": "validation_error"
+    },
+    "reference": 1
+   },
+   "read_BOGUS": {
+    "nodefga": {
+     "status": 400,
+     "code": "validation_error"
+    },
+    "reference": 1
+   },
+   "expand_BOGUS": {
+    "nodefga": {
+     "status": 400,
+     "code": "validation_error"
+    },
+    "reference": "ok"
+   }
+  },
+  "nodefga": {
+   "check_UNSPECIFIED": true,
+   "batch_UNSPECIFIED": true,
+   "listobjects_UNSPECIFIED": [
+    "doc:1"
+   ],
+   "listusers_UNSPECIFIED": 1,
+   "read_UNSPECIFIED": 1,
+   "expand_UNSPECIFIED": "ok",
+   "check_MINIMIZE_LATENCY": true,
+   "batch_MINIMIZE_LATENCY": true,
+   "listobjects_MINIMIZE_LATENCY": [
+    "doc:1"
+   ],
+   "listusers_MINIMIZE_LATENCY": 1,
+   "read_MINIMIZE_LATENCY": 1,
+   "expand_MINIMIZE_LATENCY": "ok",
+   "check_HIGHER_CONSISTENCY": true,
+   "batch_HIGHER_CONSISTENCY": true,
+   "listobjects_HIGHER_CONSISTENCY": [
+    "doc:1"
+   ],
+   "listusers_HIGHER_CONSISTENCY": 1,
+   "read_HIGHER_CONSISTENCY": 1,
+   "expand_HIGHER_CONSISTENCY": "ok",
+   "check_BOGUS": "400:validation_error",
+   "batch_BOGUS": {
+    "status": 400,
+    "code": "validation_error"
+   },
+   "listobjects_BOGUS": {
+    "status": 400,
+    "code": "validation_error"
+   },
+   "listusers_BOGUS": {
+    "status": 400,
+    "code": "validation_error"
+   },
+   "read_BOGUS": {
+    "status": 400,
+    "code": "validation_error"
+   },
+   "expand_BOGUS": {
+    "status": 400,
+    "code": "validation_error"
+   },
+   "read_your_write_MINIMIZE_LATENCY": true,
+   "read_your_write_HIGHER_CONSISTENCY": true
+  },
+  "reference": {
+   "check_UNSPECIFIED": true,
+   "batch_UNSPECIFIED": true,
+   "listobjects_UNSPECIFIED": [
+    "doc:1"
+   ],
+   "listusers_UNSPECIFIED": 1,
+   "read_UNSPECIFIED": 1,
+   "expand_UNSPECIFIED": "ok",
+   "check_MINIMIZE_LATENCY": true,
+   "batch_MINIMIZE_LATENCY": true,
+   "listobjects_MINIMIZE_LATENCY": [
+    "doc:1"
+   ],
+   "listusers_MINIMIZE_LATENCY": 1,
+   "read_MINIMIZE_LATENCY": 1,
+   "expand_MINIMIZE_LATENCY": "ok",
+   "check_HIGHER_CONSISTENCY": true,
+   "batch_HIGHER_CONSISTENCY": true,
+   "listobjects_HIGHER_CONSISTENCY": [
+    "doc:1"
+   ],
+   "listusers_HIGHER_CONSISTENCY": 1,
+   "read_HIGHER_CONSISTENCY": 1,
+   "expand_HIGHER_CONSISTENCY": "ok",
+   "check_BOGUS": true,
+   "batch_BOGUS": true,
+   "listobjects_BOGUS": [
+    "doc:1"
+   ],
+   "listusers_BOGUS": 1,
+   "read_BOGUS": 1,
+   "expand_BOGUS": "ok",
+   "read_your_write_MINIMIZE_LATENCY": true,
+   "read_your_write_HIGHER_CONSISTENCY": true
+  }
+ },
+ "f_write_semantics": {
+  "title": "Write idempotency: duplicate and missing-tuple errors, ignore options, as an SDK retry sees them",
+  "agree": false,
+  "diffs": {
+   "duplicate_inside_one_request": {
+    "nodefga": {
+     "status": 400,
+     "code": "write_failed_due_to_invalid_input"
+    },
+    "reference": {
+     "status": 400,
+     "code": "cannot_allow_duplicate_tuples_in_one_request"
+    }
+   },
+   "same_tuple_write_and_delete_same_request": {
+    "nodefga": {
+     "status": 200
+    },
+    "reference": {
+     "status": 400,
+     "code": "cannot_allow_duplicate_tuples_in_one_request"
+    }
+   },
+   "empty_write": {
+    "nodefga": {
+     "status": 400,
+     "code": "validation_error"
+    },
+    "reference": {
+     "status": 400,
+     "code": "invalid_write_input"
+    }
+   }
+  },
+  "nodefga": {
+   "first_write": {
+    "status": 200
+   },
+   "duplicate_write": {
+    "status": 400,
+    "code": "write_failed_due_to_invalid_input"
+   },
+   "duplicate_write_ignore": {
+    "status": 200
+   },
+   "delete_missing": {
+    "status": 400,
+    "code": "write_failed_due_to_invalid_input"
+   },
+   "delete_missing_ignore": {
+    "status": 200
+   },
+   "duplicate_inside_one_request": {
+    "status": 400,
+    "code": "write_failed_due_to_invalid_input"
+   },
+   "same_tuple_write_and_delete_same_request": {
+    "status": 200
+   },
+   "atomic_rollback": {
+    "status": 400,
+    "d_written": 0
+   },
+   "empty_write": {
+    "status": 400,
+    "code": "validation_error"
+   },
+   "invalid_model_id": {
+    "status": 400,
+    "code": "authorization_model_not_found"
+   },
+   "unknown_type": {
+    "status": 400,
+    "code": "validation_error"
+   },
+   "over_100_tuples": {
+    "status": 400,
+    "code": "exceeded_entity_limit"
+   },
+   "sdk_write_new": {
+    "ok": true,
+    "result": [
+     "deletes",
+     "writes"
+    ]
+   },
+   "sdk_write_retry_default": {
+    "ok": false,
+    "name": "FgaApiValidationError",
+    "status": 400,
+    "code": "write_failed_due_to_invalid_input"
+   },
+   "sdk_write_retry_ignore": {
+    "ok": true,
+    "result": [
+     "deletes",
+     "writes"
+    ]
+   },
+   "sdk_delete_missing_default": {
+    "ok": false,
+    "name": "FgaApiValidationError",
+    "status": 400,
+    "code": "write_failed_due_to_invalid_input"
+   },
+   "sdk_delete_missing_ignore": {
+    "ok": true,
+    "result": [
+     "deletes",
+     "writes"
+    ]
+   }
+  },
+  "reference": {
+   "first_write": {
+    "status": 200
+   },
+   "duplicate_write": {
+    "status": 400,
+    "code": "write_failed_due_to_invalid_input"
+   },
+   "duplicate_write_ignore": {
+    "status": 200
+   },
+   "delete_missing": {
+    "status": 400,
+    "code": "write_failed_due_to_invalid_input"
+   },
+   "delete_missing_ignore": {
+    "status": 200
+   },
+   "duplicate_inside_one_request": {
+    "status": 400,
+    "code": "cannot_allow_duplicate_tuples_in_one_request"
+   },
+   "same_tuple_write_and_delete_same_request": {
+    "status": 400,
+    "code": "cannot_allow_duplicate_tuples_in_one_request"
+   },
+   "atomic_rollback": {
+    "status": 400,
+    "d_written": 0
+   },
+   "empty_write": {
+    "status": 400,
+    "code": "invalid_write_input"
+   },
+   "invalid_model_id": {
+    "status": 400,
+    "code": "authorization_model_not_found"
+   },
+   "unknown_type": {
+    "status": 400,
+    "code": "validation_error"
+   },
+   "over_100_tuples": {
+    "status": 400,
+    "code": "exceeded_entity_limit"
+   },
+   "sdk_write_new": {
+    "ok": true,
+    "result": [
+     "deletes",
+     "writes"
+    ]
+   },
+   "sdk_write_retry_default": {
+    "ok": false,
+    "name": "FgaApiValidationError",
+    "status": 400,
+    "code": "write_failed_due_to_invalid_input"
+   },
+   "sdk_write_retry_ignore": {
+    "ok": true,
+    "result": [
+     "deletes",
+     "writes"
+    ]
+   },
+   "sdk_delete_missing_default": {
+    "ok": false,
+    "name": "FgaApiValidationError",
+    "status": 400,
+    "code": "write_failed_due_to_invalid_input"
+   },
+   "sdk_delete_missing_ignore": {
+    "ok": true,
+    "result": [
+     "deletes",
+     "writes"
+    ]
+   }
+  }
+ },
+ "g_model_pinning": {
+  "title": "Authorization-model pinning by id versus latest",
+  "agree": true,
+  "diffs": {},
+  "nodefga": {
+   "ids_differ_and_ordered": true,
+   "latest_sees_editor_as_viewer": true,
+   "pinned_m1_does_not": false,
+   "pinned_m2": true,
+   "unknown_model_id": {
+    "status": 400,
+    "code": "authorization_model_not_found"
+   },
+   "malformed_model_id": {
+    "status": 400,
+    "code": "validation_error"
+   },
+   "listobjects_pinned_m1": [],
+   "listobjects_latest": [
+    "doc:1"
+   ],
+   "list_models_latest_first": true,
+   "get_model_m1": 200,
+   "get_model_unknown": {
+    "status": 400,
+    "code": "authorization_model_not_found"
+   },
+   "no_model_check": {
+    "status": 400,
+    "code": "latest_authorization_model_not_found"
+   },
+   "no_model_list_objects": {
+    "status": 400,
+    "code": "latest_authorization_model_not_found"
+   },
+   "same_content_new_id": true
+  },
+  "reference": {
+   "ids_differ_and_ordered": true,
+   "latest_sees_editor_as_viewer": true,
+   "pinned_m1_does_not": false,
+   "pinned_m2": true,
+   "unknown_model_id": {
+    "status": 400,
+    "code": "authorization_model_not_found"
+   },
+   "malformed_model_id": {
+    "status": 400,
+    "code": "validation_error"
+   },
+   "listobjects_pinned_m1": [],
+   "listobjects_latest": [
+    "doc:1"
+   ],
+   "list_models_latest_first": true,
+   "get_model_m1": 200,
+   "get_model_unknown": {
+    "status": 400,
+    "code": "authorization_model_not_found"
+   },
+   "no_model_check": {
+    "status": 400,
+    "code": "latest_authorization_model_not_found"
+   },
+   "no_model_list_objects": {
+    "status": 400,
+    "code": "latest_authorization_model_not_found"
+   },
+   "same_content_new_id": true
+  }
+ },
+ "h_list_objects_limits": {
+  "title": "ListObjects result limits and deadlines (server defaults)",
+  "agree": false,
+  "diffs": {
+   "list_objects_ms_for_N": {
+    "nodefga": 374,
+    "reference": 3
+   }
+  },
+  "nodefga": {
+   "objects_written": 1500,
+   "list_objects_returned": 1000,
+   "list_objects_unique": 1000,
+   "streamed_status": 200,
+   "streamed_returned": 1500,
+   "list_objects_ms_for_N": 374,
+   "note_deadline": "default deadline is configurable only on the reference (3s); see the deadline probe in the write-up"
+  },
+  "reference": {
+   "objects_written": 1500,
+   "list_objects_returned": 1000,
+   "list_objects_unique": 1000,
+   "streamed_status": 200,
+   "streamed_returned": 1500,
+   "list_objects_ms_for_N": 3,
+   "note_deadline": "default deadline is configurable only on the reference (3s); see the deadline probe in the write-up"
+  }
+ },
+ "h2_list_objects_deadline_reference_1ms": {
+  "title": "ListObjects deadline behaviour (reference started with a 1 ms deadline; NodeFGA has no deadline setting)",
+  "reference": {
+   "list_objects": {
+    "status": 200,
+    "returned": 0
+   },
+   "streamed": {
+    "status": 200,
+    "objects": 0,
+    "error_line": null
+   }
+  }
+ }
+}

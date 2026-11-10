@@ -1,0 +1,491 @@
+{
+ "leaves": 152,
+ "totals": {
+  "pass": 38,
+  "fail": 111,
+  "skip": 3
+ },
+ "by": {
+  "CheckAll | core-model": {
+   "pass": 0,
+   "fail": 0,
+   "skip": 1
+  },
+  "ListObjectsAll | core-model": {
+   "pass": 0,
+   "fail": 0,
+   "skip": 1
+  },
+  "ListUsersAll | core-model": {
+   "pass": 0,
+   "fail": 0,
+   "skip": 1
+  },
+  "CheckMatrix | core-model": {
+   "pass": 0,
+   "fail": 93,
+   "skip": 0
+  },
+  "CheckMatrix | conditions": {
+   "pass": 0,
+   "fail": 1,
+   "skip": 0
+  },
+  "ListObjectsMatrix | core-model": {
+   "pass": 36,
+   "fail": 17,
+   "skip": 0
+  },
+  "ListObjectsMatrix | conditions": {
+   "pass": 2,
+   "fail": 0,
+   "skip": 0
+  }
+ },
+ "failures": [
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_object_directs_user_relation_direct",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_object_directs_user_relation_direct_cond",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_object_directs_user_relation_direct_wild",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_object_directs_user_relation_direct_wild_cond",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_object_directs_user_relation_direct_and_direct_cond",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_object_directs_user_relation_direct_and_direct_wild",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_object_directs_user_relation_direct_and_direct_wild_cond",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_object_directs_user_relation_direct_cond_and_direct_wild",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_object_directs_user_relation_direct_cond_and_direct_wild_cond",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_object_directs_user_relation_direct_wildcard_and_direct_wildcard_cond",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_computed",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_computed_cond",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_computed_wild",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_computed_wild_cond",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_computed_computed",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_computed_computed_computed",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_or_computed",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_and_computed",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_butnot_computed",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_direct_pa_direct_ch",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_or_comp_from_direct_parent",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_and_comp_from_direct_parent",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_butnot_comp_from_direct_parent",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_userset_pa_userset_ch",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_userset_pa_userset_comp_ch",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_userset_pa_userset_comp_cond_ch",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_userset_pa_userset_comp_wild_ch",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_userset_pa_userset_comp_wild_cond_ch",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_userset_cond_userset_ch",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_userset_cond_userset_comp_ch",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_userset_cond_userset_comp_cond_ch",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_userset_cond_userset_comp_wild_ch",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_userset_cond_userset_comp_wild_cond_ch",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_or_ttu",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_and_ttu",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_nested_butnot_ttu",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_recursive_ttu",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_recursive_ttu_alg",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_recursive_ttu_public",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_recursive_ttu_public_alg",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_recursive_ttu_alg_cond",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_multi_branch_recursive_ttu",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_mixed_use",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_ttu_userset_ttu",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_ttu_ttu_userset",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_userset_ttu_userset",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_userset_userset_ttu",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_compute_ttu_userset_ttu",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_compute_userset_ttu_userset",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_or_compute_complex3",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_and_nested_complex3",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_cycle_nested",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_complex3_or_userset_mix_public",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_complexity4_userset_ttu_userset_ttu",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_complexity4_ttu_ttu_ttu_userset",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_complexity4_userset_or_compute_complex3",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_complexity4_ttu_and_nested_complex3",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_complexity4_or_complex4",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_usersets_userset",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_usersets_userset_alg",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_usersets_userset_to_computed",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_usersets_userset_to_computed_wild",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_usersets_userset_to_computed_wild_cond",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_usersets_userset_cond",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_usersets_userset_cond_to_computed",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_usersets_userset_cond_to_computed_cond",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_usersets_userset_cond_to_computed_wild",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_usersets_userset_cond_to_computed_wild_cond",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_usersets_userset_direct_and_direct_wild",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_usersets_userset_to_or_computed",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_usersets_userset_to_or_computed_no_condition",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_usersets_userset_to_butnot_computed",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_usersets_userset_to_and_computed",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_usersets_userset_recursive",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_usersets_userset_recursive_alg",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_usersets_userset_recursive_public",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_usersets_userset_recursive_public_alg",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_usersets_userset_recursive_public_only",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_usersets_userset_recursive_public_only_alg",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_usersets_userset_recursive_public_cond",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_userset_recursive_mixed_direct_assignment_mixed_direct_assignment",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_usersets_or_userset",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_usersets_and_userset",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_usersets_butnot_userset",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_usersets_nested_or_userset",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_usersets_nested_and_userset",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_ttu_direct_userset",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_usersets_ttu_direct_cond_userset",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_userset_ttu_or_direct_userset",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_usersets_ttu_and_direct_userset",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_usersets_tuple_cycle2",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_usersets_tuple_cycle3",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_userset_mix_public",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_or_userset_mix_public",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "ListObjectsMatrix/test_matrix_external_external/matrix_test/test_directs_employee_alg_combined_oneline",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "ListObjectsMatrix/test_matrix_external_external/matrix_test/test_directs_employee_alg_combined",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "ListObjectsMatrix/test_matrix_external_external/matrix_test/test_usersets_user_alg_combined",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "ListObjectsMatrix/test_matrix_external_external/matrix_test/test_usersets_user_alg_combined_oneline",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "ListObjectsMatrix/test_matrix_external_external/matrix_test/test_usersets_user_userset_intersect_mixed",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "ListObjectsMatrix/test_matrix_external_external/matrix_test/test_usersets_user_userset_exclude_mixed",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "ListObjectsMatrix/test_matrix_external_external/matrix_test/test_usersets_user_userset_recursive",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "ListObjectsMatrix/test_matrix_external_external/matrix_test/test_userset_recursive_public",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "ListObjectsMatrix/test_matrix_external_external/matrix_test/test_userset_recursive_combined_w3",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "ListObjectsMatrix/test_matrix_external_external/matrix_test/test_userset_recursive_alg_combined_oneline",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "ListObjectsMatrix/test_matrix_external_external/matrix_test/test_alg_combined_computed",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "ListObjectsMatrix/test_matrix_external_external/matrix_test/test_userset_recursive_alg_combined",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "ListObjectsMatrix/test_matrix_external_external/matrix_test/test_usersets_tuple_cycle_len2_userset",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "ListObjectsMatrix/test_matrix_external_external/matrix_test/test_usersets_tuple_cycle_len3",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "ListObjectsMatrix/test_matrix_external_external/matrix_test/test_userset_recursive_alg_combined_w2",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "ListObjectsMatrix/test_matrix_external_external/matrix_test/test_ttus_multiple_parent_exclusion_intersection",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  },
+  {
+   "test": "ListObjectsMatrix/test_matrix_external_external/matrix_test/test_ttus_tuple_cycle_len2_ttu",
+   "error": "Received unexpected error: rpc error: code = Code(2000) desc = request validation failed"
+  }
+ ]
+}

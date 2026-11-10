@@ -1,0 +1,140 @@
+{
+ "engine": "nodefga",
+ "size": 1000000,
+ "orgs": 2688,
+ "started": "2026-11-10T19:25:48.633Z",
+ "host": {
+  "cpu": "Apple M3 Max",
+  "cores": 16,
+  "mem_gb": 48,
+  "loadavg_start": [
+   91.2,
+   64.7,
+   57
+  ],
+  "node": "v24.22.1",
+  "loadavg_end": [
+   58,
+   60.5,
+   63.3
+  ]
+ },
+ "docker": {
+  "ncpu": 12,
+  "mem_gb": 16,
+  "server": "29.6.1"
+ },
+ "load": {
+  "tuples": 999936,
+  "seconds": 462.5,
+  "tuples_per_second": 2162,
+  "errors": 0,
+  "concurrency": 8,
+  "batch": 100
+ },
+ "cold_definition": "PostgreSQL and the engine process restarted immediately before measurement; the Docker VM page cache is not dropped",
+ "check_allowed_ratio": 0.4,
+ "check_decisions_sha256": "0cad3850c33c50bd78918a0d4c3578e090eae3a1d994bf944bb08334840df0cb",
+ "batch_decisions_sha256": "22ae33b4304cde330c746e07d4b0712cdc20315b4251c7ab2c10358708dfa244",
+ "list_objects_result_size": {
+  "min": 100,
+  "max": 100,
+  "mean": 100
+ },
+ "latency_ms": {
+  "check_cold": {
+   "n": 500,
+   "errors": 0,
+   "p50": 3.33,
+   "p95": 5.45,
+   "p99": 6.87,
+   "max": 16.32,
+   "mean": 3.56
+  },
+  "check_cold_first_request_ms": 16.32,
+  "check_warm_repeat": {
+   "n": 1500,
+   "errors": 0,
+   "p50": 2.63,
+   "p95": 3.78,
+   "p99": 4.59,
+   "max": 8.68,
+   "mean": 2.71
+  },
+  "check_warm_fresh": {
+   "n": 500,
+   "errors": 0,
+   "p50": 2.82,
+   "p95": 4.54,
+   "p99": 5.79,
+   "max": 12.04,
+   "mean": 2.95
+  },
+  "check_warm_concurrency8": {
+   "n": 2000,
+   "errors": 0,
+   "p50": 4.67,
+   "p95": 7.26,
+   "p99": 9.77,
+   "max": 16.15,
+   "mean": 4.86,
+   "throughput_rps": 1641
+  },
+  "batch50_cold": {
+   "n": 100,
+   "errors": 0,
+   "p50": 69,
+   "p95": 82.19,
+   "p99": 85.13,
+   "max": 108.2,
+   "mean": 70.35
+  },
+  "batch50_cold_first_request_ms": 80.96,
+  "batch50_warm_repeat": {
+   "n": 300,
+   "errors": 0,
+   "p50": 64.81,
+   "p95": 76.19,
+   "p99": 83.31,
+   "max": 97.62,
+   "mean": 65.62
+  },
+  "batch50_warm_fresh": {
+   "n": 100,
+   "errors": 0,
+   "p50": 67.02,
+   "p95": 79.57,
+   "p99": 83.6,
+   "max": 86.77,
+   "mean": 67.65
+  },
+  "list_objects_first_pass": {
+   "n": 50,
+   "errors": 0,
+   "p50": 420.26,
+   "p95": 444.8,
+   "p99": 529.19,
+   "max": 529.19,
+   "mean": 423.27
+  },
+  "list_objects_warm_repeat": {
+   "n": 150,
+   "errors": 0,
+   "p50": 421.92,
+   "p95": 476.84,
+   "p99": 496.34,
+   "max": 522.2,
+   "mean": 425.33
+  },
+  "list_objects_warm_fresh": {
+   "n": 50,
+   "errors": 0,
+   "p50": 426.62,
+   "p95": 471.08,
+   "p99": 485.58,
+   "max": 485.58,
+   "mean": 431.48
+  }
+ },
+ "finished": "2026-11-10T19:36:02.259Z"
+}

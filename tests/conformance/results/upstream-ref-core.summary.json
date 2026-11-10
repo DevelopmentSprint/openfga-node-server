@@ -1,0 +1,66 @@
+{
+ "leaves": 2500,
+ "totals": {
+  "pass": 2221,
+  "fail": 0,
+  "skip": 279
+ },
+ "by": {
+  "CheckAll | core-model": {
+   "pass": 585,
+   "fail": 0,
+   "skip": 72
+  },
+  "CheckAll | conditions": {
+   "pass": 223,
+   "fail": 0,
+   "skip": 18
+  },
+  "CheckAll | inline-expressions (experimental)": {
+   "pass": 42,
+   "fail": 0,
+   "skip": 0
+  },
+  "ListObjectsAll | core-model": {
+   "pass": 483,
+   "fail": 0,
+   "skip": 58
+  },
+  "ListObjectsAll | conditions": {
+   "pass": 150,
+   "fail": 0,
+   "skip": 20
+  },
+  "ListObjectsAll | inline-expressions (experimental)": {
+   "pass": 8,
+   "fail": 0,
+   "skip": 14
+  },
+  "ListUsersAll | core-model": {
+   "pass": 526,
+   "fail": 0,
+   "skip": 70
+  },
+  "ListUsersAll | conditions": {
+   "pass": 196,
+   "fail": 0,
+   "skip": 11
+  },
+  "ListUsersAll | inline-expressions (experimental)": {
+   "pass": 8,
+   "fail": 0,
+   "skip": 14
+  },
+  "CheckMatrix | core-model": {
+   "pass": 0,
+   "fail": 0,
+   "skip": 1
+  },
+  "ListObjectsMatrix | core-model": {
+   "pass": 0,
+   "fail": 0,
+   "skip": 1
+  }
+ },
+ "failures": []
+}
