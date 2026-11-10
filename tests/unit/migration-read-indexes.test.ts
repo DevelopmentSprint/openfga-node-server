@@ -102,9 +102,10 @@ describe('authorization-model-seq migration (SQLite, openfga-k2a.16)', () => {
     const idx = await indexes('app_authz_authorization_model')
     expect(idx.find(i => i.name === 'app_authz_idx_authorization_model_store_seq_desc')?.cols)
       .toEqual(['store_id', 'seq'])
-    const down = await migrator.migrateDown()
+    // Later migrations (e.g. write-fences) are rolled back first.
+    const down = await migrator.migrateTo('1794400000000_idempotency-claim-token')
     expect(down.error).toBeUndefined()
-    expect(down.results?.[0]?.migrationName).toBe('1794400100000_authorization-model-seq')
+    expect(down.results?.map(r => r.migrationName)).toContain('1794400100000_authorization-model-seq')
     const cols = await sql<{ name: string }>`select name from pragma_table_info('app_authz_authorization_model')`.execute(db)
     expect(cols.rows.map(c => c.name)).not.toContain('seq')
     expect((await migrator.migrateToLatest()).error).toBeUndefined()

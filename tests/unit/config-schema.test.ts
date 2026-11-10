@@ -29,6 +29,7 @@ describe('ConfigSchema — defaults', () => {
     expect(cfg.auth.presharedKeys).toEqual([])
     expect(cfg.idempotency.mode).toBe('off')
     expect(cfg.idempotency.ttlMs).toBe(86_400_000)
+    expect(cfg.writeFences.enabled).toBe(false)
     expect(cfg.loadModel.apiUrl).toBe('http://localhost:8080')
     expect(cfg.loadModel.storeName).toBe('default')
     expect(cfg.loadModel.storeId).toBeUndefined()
