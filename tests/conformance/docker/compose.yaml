@@ -1,0 +1,81 @@
+# Disposable local stack: one PostgreSQL server with one database per engine, the
+# upstream reference server and NodeFGA. Loopback-only ephemeral ports, no credentials
+# beyond a throwaway password supplied by the caller.
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${CONF_PG_PASSWORD:?set a throwaway password}
+      POSTGRES_DB: postgres
+    volumes:
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports: ["127.0.0.1::5432"]
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U postgres]
+      interval: 1s
+      timeout: 3s
+      retries: 60
+  reference-migrate:
+    image: openfga/openfga:${REFERENCE_VERSION:-v1.22.0}
+    command: migrate
+    environment:
+      OPENFGA_DATASTORE_ENGINE: postgres
+      OPENFGA_DATASTORE_URI: postgres://postgres:${CONF_PG_PASSWORD}@postgres:5432/reference?sslmode=disable
+    depends_on:
+      postgres: { condition: service_healthy }
+  reference:
+    image: openfga/openfga:${REFERENCE_VERSION:-v1.22.0}
+    command: run
+    environment:
+      OPENFGA_DATASTORE_ENGINE: postgres
+      OPENFGA_DATASTORE_URI: postgres://postgres:${CONF_PG_PASSWORD}@postgres:5432/reference?sslmode=disable
+      OPENFGA_PLAYGROUND_ENABLED: "false"
+      OPENFGA_LOG_LEVEL: error
+      OPENFGA_LIST_OBJECTS_DEADLINE: ${CONF_LIST_OBJECTS_DEADLINE:-3s}
+      OPENFGA_LIST_OBJECTS_MAX_RESULTS: ${CONF_LIST_OBJECTS_MAX_RESULTS:-1000}
+    ports: ["127.0.0.1::8080"]
+    depends_on:
+      reference-migrate: { condition: service_completed_successfully }
+  # Control for the upstream suites: same image, experimental flags the suites exercise,
+  # and no query deadlines (the suites' own server settings).
+  reference-suite:
+    image: openfga/openfga:${REFERENCE_VERSION:-v1.22.0}
+    command: run
+    environment:
+      OPENFGA_DATASTORE_ENGINE: postgres
+      OPENFGA_DATASTORE_URI: postgres://postgres:${CONF_PG_PASSWORD}@postgres:5432/reference?sslmode=disable
+      OPENFGA_PLAYGROUND_ENABLED: "false"
+      OPENFGA_LOG_LEVEL: error
+      OPENFGA_EXPERIMENTALS: pipeline_list_objects,enable-check-optimizations,inline_expressions
+      OPENFGA_LIST_OBJECTS_DEADLINE: 0s
+      OPENFGA_LIST_USERS_DEADLINE: 0s
+    ports: ["127.0.0.1::8080"]
+    depends_on:
+      reference-migrate: { condition: service_completed_successfully }
+  # Reference with a tiny ListObjects deadline and a low result cap, for the limits probe.
+  reference-limits:
+    image: openfga/openfga:${REFERENCE_VERSION:-v1.22.0}
+    command: run
+    environment:
+      OPENFGA_DATASTORE_ENGINE: postgres
+      OPENFGA_DATASTORE_URI: postgres://postgres:${CONF_PG_PASSWORD}@postgres:5432/reference?sslmode=disable
+      OPENFGA_PLAYGROUND_ENABLED: "false"
+      OPENFGA_LOG_LEVEL: error
+      OPENFGA_LIST_OBJECTS_DEADLINE: 1ms
+    ports: ["127.0.0.1::8080"]
+    depends_on:
+      reference-migrate: { condition: service_completed_successfully }
+  nodefga:
+    build:
+      context: ../../..
+      dockerfile: tests/conformance/docker/nodefga.Dockerfile
+    environment:
+      OPENFGA_DB_URL: postgres://postgres:${CONF_PG_PASSWORD}@postgres:5432/nodefga
+      OPENFGA_MIGRATE_ON_START: "true"
+      OPENFGA_AUTH_MODE: none
+      OPENFGA_LOG_LEVEL: error
+      OPENFGA_DB_POOL_MAX: ${CONF_NODEFGA_POOL_MAX:-10}
+    ports: ["127.0.0.1::8080"]
+    depends_on:
+      postgres: { condition: service_healthy }

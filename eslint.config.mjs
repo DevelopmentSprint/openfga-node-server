@@ -8,6 +8,7 @@ export default tseslint.config(
       'node_modules/**',
       'migrations/**',
       'scripts/**',
+      'tests/conformance/**/*.mjs',
       '.beads/**',
       'coverage/**',
       'eslint.config.mjs',
