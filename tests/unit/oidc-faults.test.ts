@@ -260,8 +260,13 @@ describe('oidcMiddleware — token-classification faults', () => {
     // crypto verification fails, exercising the JWSSignatureVerification
     // path in classifyJoseError.
     const token = await makeJwt(fixture)
+    // Flip a bit in the decoded signature. Overwriting trailing base64url
+    // characters was flaky: they could already equal the replacement, or
+    // differ only in padding bits, leaving the signature valid.
     const parts = token.split('.')
-    parts[2] = parts[2]!.slice(0, -2) + 'XX'
+    const sig = Buffer.from(parts[2]!, 'base64url')
+    sig[Math.floor(sig.length / 2)]! ^= 0x01
+    parts[2] = sig.toString('base64url')
     const tampered = parts.join('.')
     const app = buildApp(configFor(fixture))
     const res = await bearer(app, tampered)
