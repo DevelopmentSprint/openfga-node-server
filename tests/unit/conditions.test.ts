@@ -72,4 +72,10 @@ describe('standard condition semantics', () => {
     const c = condition('xs.all(x, xs.all(y, x == y))', { xs: { type_name: 'TYPE_NAME_LIST' as TypeName, generic_types: [{ type_name: 'TYPE_NAME_INT' as TypeName }] } })
     expect(() => c.evaluate(edge, { xs: Array(1000).fill(1) })).toThrow('budget')
   })
+  it('charges the evaluation budget for declared parameters only', () => {
+    const c = condition('xs.all(x, x == 1)', { xs: { type_name: 'TYPE_NAME_LIST' as TypeName, generic_types: [{ type_name: 'TYPE_NAME_INT' as TypeName }] } })
+    const unrelated = { notes: 'x'.repeat(150000), list: Array(5000).fill(0) }
+    expect(c.evaluate(edge, { xs: [1, 1], ...unrelated })).toBe(true)
+    expect(c.evaluate({ ...edge, context: { xs: [1] } }, unrelated)).toBe(true)
+  })
 })

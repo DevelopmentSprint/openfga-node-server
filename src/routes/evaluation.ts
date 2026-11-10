@@ -11,6 +11,7 @@
 import { readContext } from '../storage/read-context'
 import { logger } from '../logger'
 import { ConditionError } from '../evaluator/conditions'
+import { ResolutionLimitError, ResolutionTooComplexError } from '../evaluator/limits'
 import { Hono } from 'hono'
 import { stream } from 'hono/streaming'
 import { validateRelation, validateUser, validateObject } from './_helpers/evaluation-validation'
@@ -31,6 +32,21 @@ import {
 import { withContextualTuples } from './_helpers/contextual-tuples'
 
 export const evaluationRoutes = new Hono()
+
+/**
+ * Upstream HTTP mapping (pkg/server/errors/encoded_errors.go): validation
+ * ErrorCodes such as authorization_model_resolution_too_complex are 400;
+ * InternalErrorCodes such as deadline_exceeded are 500. Anything else
+ * falls through to the application-wide handler.
+ */
+function resolutionLimitStatus(error: ResolutionLimitError): 400 | 500 {
+  return error instanceof ResolutionTooComplexError ? 400 : 500
+}
+
+evaluationRoutes.onError((error, c) => {
+  if (!(error instanceof ResolutionLimitError)) throw error
+  return c.json({ code: error.code, message: error.message }, resolutionLimitStatus(error))
+})
 
 evaluationRoutes.post('/stores/:storeId/check', validate('json', CheckBody), async (c) => {
   const storeId = c.req.param('storeId')
@@ -74,7 +90,9 @@ evaluationRoutes.post(path, validate('json', ListObjectsBody), async (c) => {
       'openfga.relation': body.relation,
     }),
     async (span) => {
-      const result = await listObjects(ctx.index, store, body.user, body.relation, body.type, body.context)
+      // Upstream applies the max-results cap to non-streaming ListObjects only.
+      const streamed = c.req.path.endsWith('/streamed-list-objects')
+      const result = await listObjects(ctx.index, store, body.user, body.relation, body.type, body.context, streamed ? { maxResults: 0 } : {})
       span.setAttribute('openfga.result_count', result.length)
       return result
     },
@@ -213,11 +231,15 @@ evaluationRoutes.post('/stores/:storeId/batch-check', validate('json', BatchChec
           // the success/failure of each item by correlation_id. Shape
           // errors (malformed tuple_key, bad correlation_id) are caught at
           // the validation boundary before this handler runs.
-          if (!(err instanceof ConditionError)) logger.error({ err }, 'batch_check_failed')
+          if (!(err instanceof ConditionError) && !(err instanceof ResolutionLimitError)) logger.error({ err }, 'batch_check_failed')
           acc[item.correlation_id] = {
             error: err instanceof ConditionError
               ? { input_error: 'validation_error', message: err.message }
-              : { internal_error: 'internal_error', message: 'check failed' },
+              : err instanceof ResolutionLimitError
+                ? resolutionLimitStatus(err) === 400
+                  ? { input_error: err.code, message: err.message }
+                  : { internal_error: err.code, message: err.message }
+                : { internal_error: 'internal_error', message: 'check failed' },
           }
         }
       }
