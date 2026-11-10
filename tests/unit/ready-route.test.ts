@@ -13,7 +13,8 @@
  *     the reason field is generic by contract.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { resetDb } from '../../src/storage/db'
+import { sql } from 'kysely'
+import { getDb, resetDb } from '../../src/storage/db'
 import { buildApp } from '../../src/routes/index'
 import { migrateToLatest } from '../_helpers/sqlite-bootstrap'
 import { reloadConfigForTests } from '../../src/config'
@@ -65,6 +66,17 @@ describe('GET /ready', () => {
     expect(res.status).toBe(503)
     const body = await res.json() as { status: string, reason: string }
     expect(body).toEqual({ status: 'unhealthy', reason: 'db_unreachable' })
+  })
+
+  it('returns 503 schema_outdated with a generic body when a migration is unapplied', async () => {
+    await migrateToLatest()
+    await sql`delete from openfga_kysely_migration where name = '1794300100000_read-and-model-indexes'`.execute(getDb())
+    const app = buildApp()
+    const res = await app.request('/ready')
+    expect(res.status).toBe(503)
+    const text = await res.text()
+    expect(JSON.parse(text)).toEqual({ status: 'unhealthy', reason: 'schema_outdated' })
+    expect(text).not.toContain('read-and-model-indexes')
   })
 
   it('does not require authentication (auth-exempt like /health)', async () => {

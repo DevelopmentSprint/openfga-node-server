@@ -9,8 +9,9 @@
  * schema concept, so a query-AST plugin is the cleanest equivalent.
  *
  * Edge cases:
- *   - Already-prefixed identifiers are skipped so the plugin is
- *     idempotent if a query somehow flows through twice.
+ *   - The migrator's physical tracking-table names are skipped (exact
+ *     match only). Logical tables are always prefixed, so the plugin is
+ *     NOT idempotent over already-prefixed logical names.
  *   - Identifiers carrying an explicit schema (e.g. `'sqlite_master'`
  *     via SchemableIdentifierNode.schema) are skipped. The Database
  *     type uses unqualified logical names, so this only fires on
@@ -21,6 +22,7 @@ import {
   OperationNodeTransformer,
   type PluginTransformQueryArgs,
   type PluginTransformResultArgs,
+  type ReferencesNode,
   type QueryResult,
   type RootOperationNode,
   type SchemableIdentifierNode,
@@ -36,9 +38,32 @@ import {
  */
 const PREFIX_SKIP_IDENTIFIERS = new Set(['excluded'])
 
+/**
+ * Kysely's Migrator is configured with the already-prefixed physical
+ * names of its tracking tables (see `buildMigrator`), and its queries
+ * flow through this plugin. Only those exact names are skipped; a
+ * blanket `startsWith(prefix)` check would leave a logical table such
+ * as `tuple_change` unprefixed under namespace `tuple`.
+ */
+const PHYSICAL_TABLE_SUFFIXES = ['kysely_migration', 'kysely_migration_lock'] as const
+
 class TablePrefixTransformer extends OperationNodeTransformer {
+  readonly #physicalNames: ReadonlySet<string>
+
   constructor(private readonly prefix: string) {
     super()
+    this.#physicalNames = new Set(PHYSICAL_TABLE_SUFFIXES.map(suffix => `${prefix}${suffix}`))
+  }
+
+  /**
+   * Foreign-key `references()` targets are written by migrations as
+   * already-physical names (`openfga_store.id`, see
+   * migrations/1777680000000_initial-openfga-schema.ts), because the
+   * string form of `references()` cannot carry the namespace any other
+   * way. Leave them untouched; prefixing here would double-prefix.
+   */
+  protected override transformReferences(node: ReferencesNode): ReferencesNode {
+    return node
   }
 
   protected override transformTable(node: TableNode): TableNode {
@@ -47,7 +72,7 @@ class TablePrefixTransformer extends OperationNodeTransformer {
     if (ident.schema !== undefined) return transformed
     const original = ident.identifier.name
     if (PREFIX_SKIP_IDENTIFIERS.has(original.toLowerCase())) return transformed
-    if (original.startsWith(this.prefix)) return transformed
+    if (this.#physicalNames.has(original)) return transformed
     return TableNode.create(`${this.prefix}${original}`)
   }
 }

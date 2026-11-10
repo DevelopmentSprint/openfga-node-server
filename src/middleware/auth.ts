@@ -22,6 +22,7 @@ import { logger } from '../logger'
 import { config } from '../config'
 import type { AuthMode, Config } from '../config-schema'
 import { oidcMiddleware } from './oidc'
+import { ANONYMOUS_PRINCIPAL, parseBearerToken, presharedPrincipal, setAuthPrincipal } from './caller'
 
 export type { AuthMode } from '../config-schema'
 
@@ -58,7 +59,8 @@ export function getAuthConfig(): AuthConfig {
  */
 export function authMiddleware(authConfig: AuthConfig): MiddlewareHandler {
   if (authConfig.mode === 'none') {
-    return async (_c, next) => {
+    return async (c, next) => {
+      setAuthPrincipal(c, ANONYMOUS_PRINCIPAL)
       await next()
     }
   }
@@ -68,12 +70,15 @@ export function authMiddleware(authConfig: AuthConfig): MiddlewareHandler {
   }
 
   // Pre-encode keys to Buffers once so the request hot path is just
-  // a length check + timingSafeEqual per configured key.
+  // a length check + timingSafeEqual per configured key. The principal
+  // for each key (a digest, never the key) is also computed once.
   const keyBuffers = authConfig.presharedKeys.map((k) => Buffer.from(k, 'utf8'))
+  const keyPrincipals = authConfig.presharedKeys.map((k) => presharedPrincipal(k))
 
   return async (c, next) => {
-    const header = c.req.header('Authorization')
-    if (!header || !header.startsWith('Bearer ')) {
+    // Scheme match is case-insensitive per RFC 7235 (openfga-k2a.3).
+    const parsed = parseBearerToken(c.req.header('Authorization'))
+    if (!parsed.ok) {
       logger.warn(
         { reason: 'missing_or_malformed_header', method: c.req.method, path: c.req.path },
         'auth_rejected',
@@ -81,20 +86,21 @@ export function authMiddleware(authConfig: AuthConfig): MiddlewareHandler {
       return c.json(ENVELOPE_401, 401)
     }
 
-    const presented = Buffer.from(header.slice('Bearer '.length), 'utf8')
+    const presented = Buffer.from(parsed.token, 'utf8')
     // timingSafeEqual requires equal-length buffers; the length check
     // is itself non-constant-time but only leaks the length of the
     // accepted key, which is not a useful oracle on its own.
-    let matched = false
-    for (const k of keyBuffers) {
+    let matchedIndex = -1
+    for (let i = 0; i < keyBuffers.length; i++) {
+      const k = keyBuffers[i]!
       if (k.length === presented.length && timingSafeEqual(k, presented)) {
-        matched = true
+        matchedIndex = i
         // Do not break — keep work uniform across keys to limit
         // any timing signal about which key matched.
       }
     }
 
-    if (!matched) {
+    if (matchedIndex < 0) {
       logger.warn(
         { reason: 'key_mismatch', method: c.req.method, path: c.req.path },
         'auth_rejected',
@@ -102,6 +108,7 @@ export function authMiddleware(authConfig: AuthConfig): MiddlewareHandler {
       return c.json(ENVELOPE_401, 401)
     }
 
+    setAuthPrincipal(c, keyPrincipals[matchedIndex]!)
     await next()
   }
 }

@@ -2,16 +2,25 @@
  * OpenFGA `list-objects` (reverse expansion) evaluator.
  *
  * Strategy: walk the rewrite tree forward to gather a candidate set of
- * object_ids that could possibly match, then filter by `check()` to
- * pick up `intersection` / `difference` correctness.
+ * object_ids that could possibly match, then filter by Check to pick up
+ * `intersection` / `difference` / condition correctness.
  *
- * O(candidates × check) — acceptable at prototype scale. If
- * `list-objects` becomes a hot path, replace with a proper
- * reverse-expansion algorithm (Zanzibar §5.2).
+ * Candidate discovery is a monotone fixpoint over `type#relation`
+ * nodes. A node reached again while it is still being computed (for
+ * example `viewer from parent` on `folder`) reads the previous round's
+ * result, and rounds repeat until no node's candidate set grows. Storage
+ * reads are cached per request so later rounds only query new ids.
+ *
+ * Limits follow upstream defaults: results stop at LIST_OBJECTS_MAX_RESULTS
+ * (0 = unlimited, used by streamed-list-objects) and the request returns
+ * whatever was confirmed when LIST_OBJECTS_DEADLINE_MS passes. Resolution
+ * depth/budget errors propagate.
  */
 import type { Userset } from '@openfga/sdk'
-import { check } from './check'
+import { CheckResolver } from './check'
 import { ConditionError } from './conditions'
+import { DeadlineExceededError, LIST_OBJECTS_DEADLINE_MS, LIST_OBJECTS_MAX_RESULTS } from './limits'
+import type { LimitOverrides } from './limits'
 import type { ModelIndex } from './model-index'
 import type { TupleStore } from './tuple-store'
 
@@ -22,152 +31,155 @@ export async function listObjects(
   relation: string,
   objectType: string,
   context: Record<string, unknown> = {},
+  limits: LimitOverrides = {},
 ): Promise<string[]> {
   if (!model.hasType(objectType)) return []
-  const candidates = await gather(model, store, user, objectType, relation, new Set())
-  // Usersets contain themselves even without a persisted membership tuple.
-  if (user.startsWith(`${objectType}:`) && user.includes('#')) candidates.add(user.slice(objectType.length + 1, user.indexOf('#')))
+  const maxResults = limits.maxResults ?? LIST_OBJECTS_MAX_RESULTS
+  const resolver = new CheckResolver(model, store, context, {
+    deadlineMs: limits.deadlineMs ?? LIST_OBJECTS_DEADLINE_MS,
+    nodeBudget: limits.nodeBudget,
+  })
   const out: string[] = []
-  for (const oid of candidates) {
-    if (await check(model, store, user, relation, `${objectType}:${oid}`, context)) {
-      out.push(oid)
+  try {
+    const candidates = await new CandidateGatherer(model, store, user, resolver).run(objectType, relation)
+    // Usersets contain themselves even without a persisted membership tuple.
+    if (user.startsWith(`${objectType}:`) && user.includes('#')) candidates.add(user.slice(objectType.length + 1, user.indexOf('#')))
+    for (const oid of candidates) {
+      if (maxResults > 0 && out.length >= maxResults) break
+      if (await resolver.check(user, relation, `${objectType}:${oid}`)) out.push(oid)
     }
+  }
+  catch (error) {
+    // Upstream returns the results found within the deadline.
+    if (!(error instanceof DeadlineExceededError)) throw error
   }
   return out
 }
 
-async function gather(
-  model: ModelIndex,
-  store: TupleStore,
-  user: string,
-  objectType: string,
-  relation: string,
-  visited: Set<string>,
-): Promise<Set<string>> {
-  const visitKey = `${objectType}#${relation}`
-  if (visited.has(visitKey)) return new Set()
-  visited.add(visitKey)
+class CandidateGatherer {
+  private previous = new Map<string, Set<string>>()
+  private current = new Map<string, Set<string>>()
+  private readonly inProgress = new Set<string>()
+  private readonly reads = new Map<string, Promise<string[]>>()
+  private readonly direct = new Map<string, Promise<Set<string>>>()
+  private grew = false
 
-  const def = model.getRelation(objectType, relation)
-  if (!def) return new Set()
-  return gatherForRewrite(model, store, user, objectType, relation, def.rewrite, visited)
-}
+  constructor(
+    private readonly model: ModelIndex,
+    private readonly store: TupleStore,
+    private readonly user: string,
+    private readonly resolver: CheckResolver,
+  ) {}
 
-async function gatherForRewrite(
-  model: ModelIndex,
-  store: TupleStore,
-  user: string,
-  objectType: string,
-  relation: string,
-  rewrite: Userset,
-  visited: Set<string>,
-): Promise<Set<string>> {
-  if (rewrite.this !== undefined) {
-    return gatherDirect(model, store, user, objectType, relation)
-  }
-  if (rewrite.computedUserset?.relation) {
-    return gather(model, store, user, objectType, rewrite.computedUserset.relation, visited)
-  }
-  if (rewrite.tupleToUserset) {
-    const tuplesetRel = rewrite.tupleToUserset.tupleset?.relation
-    const computedRel = rewrite.tupleToUserset.computedUserset?.relation
-    if (!tuplesetRel || !computedRel) return new Set()
-    return gatherTupleToUserset(model, store, user, objectType, tuplesetRel, computedRel, visited)
-  }
-  if (rewrite.union) {
-    const out = new Set<string>()
-    for (const child of rewrite.union.child ?? []) {
-      const childIds = await gatherForRewrite(model, store, user, objectType, relation, child, new Set(visited))
-      for (const id of childIds) out.add(id)
+  async run(objectType: string, relation: string): Promise<Set<string>> {
+    for (;;) {
+      this.grew = false
+      this.current = new Map()
+      const result = await this.node(objectType, relation)
+      this.previous = this.current
+      if (!this.grew) return result
     }
-    return out
-  }
-  if (rewrite.intersection) {
-    // Take the union — `check()` filters down to true intersection.
-    const out = new Set<string>()
-    for (const child of rewrite.intersection.child ?? []) {
-      const childIds = await gatherForRewrite(model, store, user, objectType, relation, child, new Set(visited))
-      for (const id of childIds) out.add(id)
-    }
-    return out
-  }
-  if (rewrite.difference?.base) {
-    return gatherForRewrite(model, store, user, objectType, relation, rewrite.difference.base, visited)
-  }
-  return new Set()
-}
-
-async function gatherDirect(
-  model: ModelIndex,
-  store: TupleStore,
-  user: string,
-  objectType: string,
-  relation: string,
-): Promise<Set<string>> {
-  const out = new Set<string>()
-
-  // Direct user reference.
-  for (const oid of await store.listObjectIdsForUser(objectType, relation, user)) {
-    out.add(oid)
   }
 
-  // Typed wildcard `<userType>:*`.
-  const userType = parseObject(user).type
-  for (const oid of await store.listObjectIdsForUser(objectType, relation, `${userType}:*`)) {
-    out.add(oid)
-  }
-
-  // Userset references — scan tuples for this relation, recurse into
-  // each `<type>:<id>#<rel>` user_str.
-  const all = await store.listAllForRelation(objectType, relation)
-  for (const { object_id, user_str } of all) {
-    const hashIdx = user_str.indexOf('#')
-    if (hashIdx < 0) continue
-    if (out.has(object_id)) continue
-    const refObject = user_str.slice(0, hashIdx)
-    const refRelation = user_str.slice(hashIdx + 1)
-    const { type: refType, id: refId } = parseObject(refObject)
+  private async node(objectType: string, relation: string): Promise<Set<string>> {
+    const key = `${objectType}#${relation}`
+    const done = this.current.get(key)
+    if (done) return done
+    const before = this.previous.get(key) ?? new Set<string>()
+    if (this.inProgress.has(key)) return before
+    this.resolver.checkDeadline()
+    const def = this.model.getRelation(objectType, relation)
+    if (!def) return new Set()
+    this.inProgress.add(key)
     try {
-      if (await check(model, store, user, refRelation, `${refType}:${refId}`)) out.add(object_id)
+      const found = await this.rewrite(objectType, relation, def.rewrite)
+      // Sets only grow between rounds; keep earlier members explicitly.
+      for (const id of before) found.add(id)
+      if (found.size !== before.size) this.grew = true
+      this.current.set(key, found)
+      return found
     }
-    catch (error) {
-      if (!(error instanceof ConditionError)) throw error
-      // Candidate discovery cannot decide an edge without request context.
-      // The final Check uses the complete context and error algebra.
-      out.add(object_id)
+    finally {
+      this.inProgress.delete(key)
     }
   }
 
-  return out
-}
+  private async rewrite(objectType: string, relation: string, rewrite: Userset): Promise<Set<string>> {
+    if (rewrite.this !== undefined) return new Set(await this.directCandidates(objectType, relation))
+    if (rewrite.computedUserset?.relation) return new Set(await this.node(objectType, rewrite.computedUserset.relation))
+    if (rewrite.tupleToUserset) {
+      const tuplesetRel = rewrite.tupleToUserset.tupleset?.relation
+      const computedRel = rewrite.tupleToUserset.computedUserset?.relation
+      if (!tuplesetRel || !computedRel) return new Set()
+      return this.tupleToUserset(objectType, tuplesetRel, computedRel)
+    }
+    // Intersection and difference gather a superset; Check decides.
+    const children = rewrite.union?.child ?? rewrite.intersection?.child
+      ?? (rewrite.difference?.base ? [rewrite.difference.base] : [])
+    const out = new Set<string>()
+    for (const child of children) {
+      for (const id of await this.rewrite(objectType, relation, child)) out.add(id)
+    }
+    return out
+  }
 
-async function gatherTupleToUserset(
-  model: ModelIndex,
-  store: TupleStore,
-  user: string,
-  objectType: string,
-  tuplesetRel: string,
-  computedRel: string,
-  visited: Set<string>,
-): Promise<Set<string>> {
-  const tuplesetDef = model.getRelation(objectType, tuplesetRel)
-  if (!tuplesetDef) return new Set()
-  const out = new Set<string>()
+  /** Direct, wildcard and userset grants. Independent of the fixpoint, so computed once. */
+  private directCandidates(objectType: string, relation: string): Promise<Set<string>> {
+    const key = `${objectType}#${relation}`
+    let pending = this.direct.get(key)
+    if (!pending) {
+      pending = this.gatherDirect(objectType, relation)
+      this.direct.set(key, pending)
+    }
+    return pending
+  }
 
-  for (const ref of tuplesetDef.directlyRelatedUserTypes) {
-    if (!ref.type) continue
-    const type2 = ref.type
-    // Find every type2 object the user has `computedRel` on, recursively.
-    const reachable = await gather(model, store, user, type2, computedRel, new Set(visited))
-    for (const type2Id of reachable) {
-      // Find object_ids of objectType where (objectType:?, tuplesetRel, type2:type2Id).
-      for (const oid of await store.listObjectIdsForUser(objectType, tuplesetRel, `${type2}:${type2Id}`)) {
-        out.add(oid)
+  private async gatherDirect(objectType: string, relation: string): Promise<Set<string>> {
+    const out = new Set<string>()
+    for (const oid of await this.objectIdsFor(objectType, relation, this.user)) out.add(oid)
+    const userType = parseObject(this.user).type
+    for (const oid of await this.objectIdsFor(objectType, relation, `${userType}:*`)) out.add(oid)
+
+    // Userset references: keep objects whose referenced userset contains the user.
+    for (const { object_id, user_str } of await this.store.listAllForRelation(objectType, relation)) {
+      const hashIdx = user_str.indexOf('#')
+      if (hashIdx < 0 || out.has(object_id)) continue
+      this.resolver.checkDeadline()
+      try {
+        if (await this.resolver.check(this.user, user_str.slice(hashIdx + 1), user_str.slice(0, hashIdx))) out.add(object_id)
+      }
+      catch (error) {
+        if (!(error instanceof ConditionError)) throw error
+        // The final Check applies the condition error algebra.
+        out.add(object_id)
       }
     }
+    return out
   }
 
-  return out
+  private async tupleToUserset(objectType: string, tuplesetRel: string, computedRel: string): Promise<Set<string>> {
+    const tuplesetDef = this.model.getRelation(objectType, tuplesetRel)
+    if (!tuplesetDef) return new Set()
+    const out = new Set<string>()
+    for (const ref of tuplesetDef.directlyRelatedUserTypes) {
+      if (!ref.type) continue
+      for (const parentId of await this.node(ref.type, computedRel)) {
+        this.resolver.checkDeadline()
+        for (const oid of await this.objectIdsFor(objectType, tuplesetRel, `${ref.type}:${parentId}`)) out.add(oid)
+      }
+    }
+    return out
+  }
+
+  private objectIdsFor(objectType: string, relation: string, userStr: string): Promise<string[]> {
+    const key = `${objectType}\0${relation}\0${userStr}`
+    let pending = this.reads.get(key)
+    if (!pending) {
+      pending = this.store.listObjectIdsForUser(objectType, relation, userStr)
+      this.reads.set(key, pending)
+    }
+    return pending
+  }
 }
 
 function parseObject(s: string): { type: string, id: string } {

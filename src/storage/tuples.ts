@@ -17,10 +17,11 @@
  * typed wildcard (`<type>:*`). The evaluator parses it on read.
  */
 import { DEFAULT_READ_CONTEXT, type ReadContext } from './read-context'
-import { sql } from 'kysely'
+import { sql, type RawBuilder, type Transaction } from 'kysely'
 import type { TupleKey, TupleKeyWithoutCondition } from '@openfga/sdk'
-import { getDb, getDialect } from './db'
-import { dialectBigintParam, dialectTimestampParam } from './dialect'
+import { getDb, getDialect, getNamespace } from './db'
+import type { Database } from './db-schema'
+import { dialectBigintParam, dialectTimestampParam, isPostgres } from './dialect'
 import { generateId } from './ids'
 import { traced } from '../observability/otel'
 
@@ -124,87 +125,235 @@ export async function applyTupleMutations(
   )
 }
 
+export class StoreNotFoundError extends Error {
+  constructor(readonly storeId: string) {
+    super(`store ${storeId} not found`)
+    this.name = 'StoreNotFoundError'
+  }
+}
+
+/**
+ * Postgres SQLSTATEs for which the whole mutation transaction is
+ * safely retryable: `40P01` deadlock_detected and `40001`
+ * serialization_failure. The transaction rolled back, so re-running
+ * it from the start cannot double-apply anything.
+ */
+const RETRYABLE_SQLSTATES = new Set(['40P01', '40001'])
+export const MAX_WRITE_ATTEMPTS = 3
+
+function isRetryableTransactionError(err: unknown): boolean {
+  const code = (err as { code?: unknown } | null)?.code
+  return typeof code === 'string' && RETRYABLE_SQLSTATES.has(code)
+}
+
+/**
+ * Run `attempt` up to `maxAttempts` times, retrying only on a
+ * deadlock or serialization failure. Any other error (including the
+ * domain errors thrown for duplicates, missing tuples, and deleted
+ * stores) propagates immediately.
+ */
+export async function retryOnTransactionConflict<T>(
+  attempt: () => Promise<T>,
+  maxAttempts: number = MAX_WRITE_ATTEMPTS,
+  backoffMs: (attemptNumber: number) => number = n => n * (5 + Math.random() * 20),
+): Promise<T> {
+  for (let n = 1; ; n++) {
+    try {
+      return await attempt()
+    }
+    catch (err) {
+      if (n >= maxAttempts || !isRetryableTransactionError(err)) throw err
+      await new Promise(resolve => setTimeout(resolve, backoffMs(n)))
+    }
+  }
+}
+
+interface PlannedMutation<T> {
+  /** Position in the caller's array; errors and changelog order use it. */
+  index: number
+  tuple: T
+  obj: ObjectRef
+}
+
+function plan<T extends { object: string }>(tuples: readonly T[]): PlannedMutation<T>[] {
+  return tuples.map((tuple, index) => ({ index, tuple, obj: parseObject(tuple.object) }))
+}
+
+function compareText(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0
+}
+
+/**
+ * Stable sort by the tuple's natural key. Every transaction acquires
+ * row and unique-index locks in this one global order, so two
+ * overlapping mutation sets can never wait on each other in a cycle.
+ * Stability keeps repeated keys in request order, so the second copy
+ * of a key is still the one reported as the duplicate/missing tuple.
+ */
+function inKeyOrder<T extends { relation: string, user: string }>(items: PlannedMutation<T>[]): PlannedMutation<T>[] {
+  return [...items].sort((a, b) =>
+    compareText(a.obj.type, b.obj.type)
+    || compareText(a.obj.id, b.obj.id)
+    || compareText(a.tuple.relation, b.tuple.relation)
+    || compareText(a.tuple.user, b.tuple.user))
+}
+
 async function applyTupleMutationsImpl(
   storeId: string,
   mutations: TupleMutations,
 ): Promise<void> {
-  await getDb().transaction().execute(async (trx) => {
-    for (const t of mutations.writes) {
-      const obj = parseObject(t.object)
-      const condition = (t as TupleKey).condition
-      const conditionColumns = {
-        condition_name: condition?.name ?? null,
-        condition_context: condition?.context ? JSON.stringify(condition.context) : null,
-      }
+  const writes = plan<TupleKey | TupleKeyWithoutCondition>(mutations.writes)
+  const deletes = plan<TupleKey | TupleKeyWithoutCondition>(mutations.deletes)
+  await retryOnTransactionConflict(() => runMutationTransaction(storeId, mutations, writes, deletes))
+}
+
+/**
+ * One mutation transaction. Order of operations:
+ *
+ * 1. Postgres: take the per-store transaction-scoped advisory lock
+ *    BEFORE anything else. Mutation transactions of one store are
+ *    therefore serialized: the next one cannot pass this point until
+ *    the previous one has committed or rolled back (the lock is
+ *    released only after commit is visible to new snapshots).
+ * 2. Re-verify the store is live, holding a share lock on its row on
+ *    Postgres so a concurrent `deleteStore` UPDATE waits for us — or,
+ *    if it committed first, we observe `deleted_at` and fail with
+ *    StoreNotFoundError instead of writing into a deleted store.
+ * 3. Apply tuple mutations in key order (deadlock avoidance), writes
+ *    before deletes as before. In `error` mode all mutations of a
+ *    phase are attempted and the failure with the lowest request index
+ *    is reported, so the reported tuple matches request-order
+ *    processing. Failed attempts are side-effect free inside the
+ *    transaction (ON CONFLICT DO NOTHING / zero-row DELETE), and the
+ *    thrown error rolls everything back.
+ * 4. Record changelog rows in request order (writes, then deletes) so
+ *    ReadChanges ordering within one request is unchanged. On Postgres
+ *    each row is stamped with `changelogTimestamp`, evaluated after the
+ *    lock in step 1.
+ */
+async function runMutationTransaction(
+  storeId: string,
+  mutations: TupleMutations,
+  writes: PlannedMutation<TupleKey | TupleKeyWithoutCondition>[],
+  deletes: PlannedMutation<TupleKey | TupleKeyWithoutCondition>[],
+): Promise<void> {
+  const postgres = isPostgres(getDialect())
+  const builder = postgres ? getDb().transaction().setIsolationLevel('read committed') : getDb().transaction()
+  await builder.execute(async (trx) => {
+    if (postgres) {
+      await sql`select pg_advisory_xact_lock(hashtext(${`${getNamespace()}.tuple_write`}), hashtext(${storeId}))`.execute(trx)
+    }
+
+    const liveStore = trx.selectFrom('store').select('id')
+      .where('id', '=', storeId).where('deleted_at', 'is', null)
+    if (!(await (postgres ? liveStore.forShare() : liveStore).executeTakeFirst())) {
+      throw new StoreNotFoundError(storeId)
+    }
+
+    const insertedWrites = new Set<number>()
+    let firstDuplicate: number | null = null
+    for (const w of inKeyOrder(writes)) {
+      const condition = (w.tuple as TupleKey).condition
       const insertResult = await trx
         .insertInto('tuple')
         .values({
-          ...conditionColumns,
+          ...conditionColumns(condition),
           store_id: storeId,
-          object_type: obj.type,
-          object_id: obj.id,
-          relation: t.relation,
-          user_str: t.user,
+          object_type: w.obj.type,
+          object_id: w.obj.id,
+          relation: w.tuple.relation,
+          user_str: w.tuple.user,
         })
         .onConflict(oc => oc.doNothing())
         .executeTakeFirst()
-      const inserted = (insertResult.numInsertedOrUpdatedRows ?? 0n) > 0n
-      if (!inserted && mutations.onDuplicate === 'error') {
-        throw new DuplicateTupleError(t)
-      }
-      // Record the change in the same transaction as the mutation
-      // so a crash between the two cannot leave the changelog out of
-      // sync with tuple state. Skip when ON CONFLICT silently ignored
-      // — the caller asked for at-most-once semantics on duplicates.
-      if (inserted) {
-        await trx
-          .insertInto('tuple_change')
-          .values({
-            id: generateId(),
-            store_id: storeId,
-            object_type: obj.type,
-            object_id: obj.id,
-            relation: t.relation,
-            user_str: t.user,
-            operation: 'TUPLE_OPERATION_WRITE',
-            ...conditionColumns,
-          })
-          .execute()
-      }
+      if ((insertResult.numInsertedOrUpdatedRows ?? 0n) > 0n) insertedWrites.add(w.index)
+      else if (firstDuplicate === null || w.index < firstDuplicate) firstDuplicate = w.index
+    }
+    if (firstDuplicate !== null && mutations.onDuplicate === 'error') {
+      throw new DuplicateTupleError(writes[firstDuplicate]!.tuple)
     }
 
-    for (const t of mutations.deletes) {
-      const obj = parseObject(t.object)
+    const removedDeletes = new Set<number>()
+    let firstMissing: number | null = null
+    for (const d of inKeyOrder(deletes)) {
       const deleteResult = await trx
         .deleteFrom('tuple')
         .where('store_id', '=', storeId)
-        .where('object_type', '=', obj.type)
-        .where('object_id', '=', obj.id)
-        .where('relation', '=', t.relation)
-        .where('user_str', '=', t.user)
+        .where('object_type', '=', d.obj.type)
+        .where('object_id', '=', d.obj.id)
+        .where('relation', '=', d.tuple.relation)
+        .where('user_str', '=', d.tuple.user)
         .executeTakeFirst()
-      const deleted = (deleteResult.numDeletedRows ?? 0n) > 0n
-      if (!deleted && mutations.onMissing === 'error') {
-        throw new MissingTupleError(t)
-      }
-      // Same transactional invariant as writes: only record a change
-      // when the DELETE actually removed a row.
-      if (deleted) {
-        await trx
-          .insertInto('tuple_change')
-          .values({
-            id: generateId(),
-            store_id: storeId,
-            object_type: obj.type,
-            object_id: obj.id,
-            relation: t.relation,
-            user_str: t.user,
-            operation: 'TUPLE_OPERATION_DELETE',
-          })
-          .execute()
-      }
+      if ((deleteResult.numDeletedRows ?? 0n) > 0n) removedDeletes.add(d.index)
+      else if (firstMissing === null || d.index < firstMissing) firstMissing = d.index
+    }
+    if (firstMissing !== null && mutations.onMissing === 'error') {
+      throw new MissingTupleError(deletes[firstMissing]!.tuple)
+    }
+
+    // Record each change in the same transaction as the mutation so a
+    // crash between the two cannot leave the changelog out of sync
+    // with tuple state. Only mutations that changed a row are logged:
+    // ignored duplicates and missing deletes are at-most-once no-ops.
+    const changes = [
+      ...writes.filter(w => insertedWrites.has(w.index)).map(w => ({
+        mutation: w,
+        operation: 'TUPLE_OPERATION_WRITE' as const,
+        ...conditionColumns((w.tuple as TupleKey).condition),
+      })),
+      ...deletes.filter(d => removedDeletes.has(d.index)).map(d => ({
+        mutation: d,
+        operation: 'TUPLE_OPERATION_DELETE' as const,
+      })),
+    ]
+    for (const { mutation, ...change } of changes) {
+      await trx
+        .insertInto('tuple_change')
+        .values({
+          ...change,
+          id: generateId(),
+          store_id: storeId,
+          object_type: mutation.obj.type,
+          object_id: mutation.obj.id,
+          relation: mutation.tuple.relation,
+          user_str: mutation.tuple.user,
+          // SQLite keeps the column default: a single writer commits
+          // in statement order already.
+          ...(postgres ? { inserted_at: changelogTimestamp(trx, storeId) } : {}),
+        })
+        .execute()
     }
   })
+}
+
+function conditionColumns(condition: TupleKey['condition']) {
+  return {
+    condition_name: condition?.name ?? null,
+    condition_context: condition?.context ? JSON.stringify(condition.context) : null,
+  }
+}
+
+/**
+ * Postgres changelog timestamp, evaluated per row while the per-store
+ * advisory lock is held:
+ *
+ *   greatest(clock_timestamp(), max(inserted_at of this store) + 1µs)
+ *
+ * The column default `now()` is the transaction START time, which can
+ * precede the commit of transactions that started later; with it a
+ * slow writer could commit a row behind a poller's cursor. The
+ * statement runs after the lock (READ COMMITTED snapshot per
+ * statement), so `max` covers every previously committed row of the
+ * store plus this transaction's earlier rows. The result is therefore
+ * strictly greater than every visible changelog timestamp of the
+ * store, independent of clock resolution or a wall clock stepping
+ * backwards. Index-backed by idx_tuple_change_store_inserted_seq.
+ */
+function changelogTimestamp(trx: Transaction<Database>, storeId: string): RawBuilder<string> {
+  const latest = trx.selectFrom('tuple_change')
+    .select(sql<string>`max(inserted_at) + interval '1 microsecond'`.as('next'))
+    .where('store_id', '=', storeId)
+  return sql<string>`greatest(clock_timestamp(), (${latest}))`
 }
 
 export async function writeTuples(

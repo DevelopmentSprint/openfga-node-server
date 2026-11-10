@@ -69,7 +69,7 @@ export default defineConfig({
     // land with their own tests.
     coverage: {
       provider: 'v8',
-      include: ['src/**'],
+      include: ['src/**/*.ts'],
       exclude: [
         // Admin CLI tooling — exercised manually, not part of the
         // server runtime exposed by /stores/* routes.

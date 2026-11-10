@@ -16,6 +16,7 @@ import {
   applyTupleMutations,
   listChangesPage,
   readTuplesPage,
+  StoreNotFoundError,
   type ReadTupleCursor,
   type TupleConflictMode,
 } from '../storage/tuples'
@@ -31,6 +32,9 @@ import {
   type ChangeCursor,
 } from './_helpers/cursors'
 
+/** Upstream OpenFGA's default cap on writes + deletes per Write call. */
+const MAX_TUPLES_PER_WRITE = 100
+
 export const tuplesRoutes = new Hono()
 
 tuplesRoutes.post('/stores/:storeId/write', validate('json', WriteBody), async (c) => {
@@ -38,6 +42,13 @@ tuplesRoutes.post('/stores/:storeId/write', validate('json', WriteBody), async (
   const body = c.req.valid('json')
   const writes = body.writes?.tuple_keys ?? []
   const deletes = body.deletes?.tuple_keys ?? []
+
+  if (writes.length + deletes.length > MAX_TUPLES_PER_WRITE) {
+    return c.json({
+      code: 'exceeded_entity_limit',
+      message: `The number of write and delete operations (${writes.length + deletes.length}) exceeds the allowed limit of ${MAX_TUPLES_PER_WRITE}`,
+    }, 400)
+  }
 
   const onDuplicate = body.writes?.on_duplicate ?? 'error'
   const onMissing = body.deletes?.on_missing ?? 'error'
@@ -67,6 +78,11 @@ tuplesRoutes.post('/stores/:storeId/write', validate('json', WriteBody), async (
   catch (err) {
     if (err instanceof DuplicateTupleError || err instanceof MissingTupleError) {
       return c.json({ code: 'write_failed_due_to_invalid_input', message: err.message }, 400)
+    }
+    // requireStore checked the store before the transaction; this
+    // covers a deleteStore that commits in between.
+    if (err instanceof StoreNotFoundError) {
+      return c.json({ code: 'store_id_not_found', message: err.message }, 404)
     }
     throw err
   }

@@ -17,11 +17,11 @@
  * loopback port. The fixture's response shape is mutable per test so
  * fault modes can be swapped without restarting the server.
  */
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Hono } from 'hono'
 import { serve, type ServerType } from '@hono/node-server'
 import { SignJWT, exportJWK, generateKeyPair, type JWK } from 'jose'
-import { oidcMiddleware, OidcDiscoveryError, prefetchOidcJwks } from '../../src/middleware/oidc'
+import { oidcMiddleware, OidcDiscoveryError, prefetchOidcJwks, resetOidcDiscoveryCacheForTests } from '../../src/middleware/oidc'
 import type { OidcConfig } from '../../src/middleware/oidc'
 
 type DiscoveryMode = 'ok' | '500' | 'missing-jwks-uri' | 'malformed-json'
@@ -34,6 +34,7 @@ interface Fixture {
   kid: string
   discoveryMode: DiscoveryMode
   jwksMode: 'ok' | '500'
+  discoveryHits: number
   shutdown(): Promise<void>
 }
 
@@ -53,11 +54,13 @@ async function bootFixture(): Promise<Fixture> {
     kid,
     discoveryMode: 'ok',
     jwksMode: 'ok',
+    discoveryHits: 0,
     shutdown: async () => {},
   }
 
   const app = new Hono()
   app.get('/.well-known/openid-configuration', (c) => {
+    fixture.discoveryHits++
     switch (fixture.discoveryMode) {
       case '500': return c.text('boom', 500)
       case 'missing-jwks-uri': return c.json({ issuer: fixture.baseUrl })
@@ -132,6 +135,12 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await fixture.shutdown()
+})
+
+beforeEach(() => {
+  // Discovery results are memoized per config (openfga-k2a.3); start
+  // every test from a cold cache so fixture mode toggles take effect.
+  resetOidcDiscoveryCacheForTests()
 })
 
 describe('oidcMiddleware — discovery faults', () => {
@@ -296,5 +305,54 @@ describe('oidcMiddleware — per-request JWKS faults', () => {
       .sign(stranger.privateKey)
     const res = await bearer(app, orphan)
     expect(res.status).toBe(401)
+  })
+})
+
+describe('oidc discovery — shared, non-sticky failure (openfga-k2a.3)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    fixture.discoveryMode = 'ok'
+  })
+
+  it('recovers after a transient discovery failure instead of returning 401 forever', async () => {
+    fixture.discoveryMode = '500'
+    const app = buildApp(configFor(fixture))
+    const token = await makeJwt(fixture)
+    expect((await bearer(app, token)).status).toBe(401)
+
+    // Issuer recovers. Advance the clock past the retry backoff so the
+    // next request re-runs discovery rather than reusing the failure.
+    fixture.discoveryMode = 'ok'
+    const realNow = Date.now()
+    vi.spyOn(Date, 'now').mockReturnValue(realNow + 60_000)
+    expect((await bearer(app, token)).status).toBe(200)
+  })
+
+  it('does not re-run discovery on every request while inside the retry backoff', async () => {
+    fixture.discoveryMode = '500'
+    const app = buildApp(configFor(fixture))
+    const token = await makeJwt(fixture)
+    expect((await bearer(app, token)).status).toBe(401)
+    const hitsAfterFirstFailure = fixture.discoveryHits
+    expect((await bearer(app, token)).status).toBe(401)
+    expect(fixture.discoveryHits).toBe(hitsAfterFirstFailure)
+  })
+
+  it('shares one discovery between boot prefetch and the middleware', async () => {
+    const cfg = configFor(fixture)
+    const before = fixture.discoveryHits
+    await prefetchOidcJwks(cfg)
+    const app = buildApp(cfg)
+    expect((await bearer(app, await makeJwt(fixture))).status).toBe(200)
+    expect((await bearer(app, await makeJwt(fixture))).status).toBe(200)
+    expect(fixture.discoveryHits - before).toBe(1)
+  })
+
+  it('boot prefetch retries immediately after an earlier failure (fail-fast stays accurate)', async () => {
+    fixture.discoveryMode = '500'
+    const cfg = configFor(fixture)
+    await expect(prefetchOidcJwks(cfg)).rejects.toThrow(OidcDiscoveryError)
+    fixture.discoveryMode = 'ok'
+    await expect(prefetchOidcJwks(cfg)).resolves.toBeUndefined()
   })
 })

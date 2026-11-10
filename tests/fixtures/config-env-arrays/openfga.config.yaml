@@ -1,0 +1,10 @@
+auth:
+  mode: preshared
+  presharedKeys:
+    - base-key-1
+    - base-key-2
+
+$production:
+  auth:
+    presharedKeys:
+      - prod-key-1

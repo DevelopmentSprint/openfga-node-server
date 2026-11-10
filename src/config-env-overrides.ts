@@ -125,6 +125,8 @@ export function applyEnvOverrides(raw: unknown, env: EnvLike = process.env): unk
   set(['auth', 'oidc', 'audience'], 'OPENFGA_AUTH_OIDC_AUDIENCE')
   set(['auth', 'oidc', 'clockSkewSec'], 'OPENFGA_AUTH_OIDC_CLOCK_SKEW_SEC')
   set(['auth', 'oidc', 'jwksUri'], 'OPENFGA_AUTH_OIDC_JWKS_URI')
+  set(['auth', 'oidc', 'jwksCacheMaxAgeMs'], 'OPENFGA_AUTH_OIDC_JWKS_CACHE_MAX_AGE_MS')
+  set(['auth', 'oidc', 'jwksCooldownMs'], 'OPENFGA_AUTH_OIDC_JWKS_COOLDOWN_MS')
 
   // Comma-separated array fields for OIDC. Same split/trim/drop-empty
   // policy as OPENFGA_AUTH_PRESHARED_KEYS.
