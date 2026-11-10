@@ -10,6 +10,7 @@
  * the `integration-pg` project re-runs the same specs against Postgres.
  */
 import { afterAll, describe, expect, it } from 'vitest'
+import { reloadConfigForTests } from '../../src/config'
 import { buildApp } from '../../src/routes/index'
 import { createStore } from '../../src/storage/stores'
 import { writeAuthorizationModel } from '../../src/storage/authorization-models'
@@ -164,4 +165,62 @@ describeIfDb('POST /stores/:storeId/batch-check', () => {
     const body = await res.json() as { code: string }
     expect(body.code).toBe('validation_error')
   })
+  it('returns all 50 results with one semantic error without failing the batch', async () => {
+    const { app, storeId } = await setup()
+    const checks = Array.from({ length: 50 }, (_, i) => ({
+      tuple_key: { user: 'user:alice', relation: i === 49 ? 'missing' : 'viewer', object: 'doc:1' },
+      correlation_id: `check_${i}`,
+    }))
+    const response = await app.fetch(batchCheck(storeId, { checks }))
+    expect(response.status).toBe(200)
+    const json = await response.json() as { result: Record<string, unknown> }
+    expect(Object.keys(json.result)).toHaveLength(50)
+    expect(json.result.check_0).toEqual({ allowed: false })
+    expect(json.result.check_49).toEqual({ error: { input_error: 'validation_error', message: "invalid relation: relation 'doc#missing' not found" } })
+  })
+
+  it('preserves prototype-shaped correlation IDs as ordinary result keys', async () => {
+    const { app, storeId } = await setup()
+    const ids = ['__proto__', 'constructor', 'toString', 'valid_Id-1', 'a'.repeat(36)]
+    const response = await app.fetch(batchCheck(storeId, { checks: ids.map(correlation_id => ({
+      tuple_key: { user: 'user:alice', relation: 'viewer', object: 'doc:1' }, correlation_id,
+    })) }))
+    expect(response.status).toBe(200)
+    const json = await response.json() as { result: Record<string, unknown> }
+    expect(Object.keys(json.result).sort()).toEqual(ids.sort())
+    for (const id of ids) expect(json.result[id]).toEqual({ allowed: false })
+  })
+
+  it.each(['', 'a'.repeat(37), 'has space', 'trailing\n', 'unicode-é'])('rejects invalid correlation ID %j', async (correlation_id) => {
+    const { app, storeId } = await setup()
+    const response = await app.fetch(batchCheck(storeId, { checks: [{
+      tuple_key: { user: 'user:alice', relation: 'viewer', object: 'doc:1' }, correlation_id,
+    }] }))
+    expect(response.status).toBe(400)
+    expect(await response.json()).toMatchObject({ code: 'validation_error' })
+  })
+
+  it.each([2, 100])('enforces configured limit %i in both directions', async (limit) => {
+    const previous = process.env['OPENFGA_MAX_CHECKS_PER_BATCH_CHECK']
+    try {
+      process.env['OPENFGA_MAX_CHECKS_PER_BATCH_CHECK'] = String(limit)
+      await reloadConfigForTests()
+      const { app, storeId } = await setup()
+      const checks = Array.from({ length: limit + 1 }, (_, i) => ({
+        tuple_key: { user: 'user:alice', relation: 'viewer', object: 'doc:1' }, correlation_id: `c${i}`,
+      }))
+      const accepted = await app.fetch(batchCheck(storeId, { checks: checks.slice(0, limit) }))
+      expect(accepted.status).toBe(200)
+      expect(Object.keys((await accepted.json() as BatchCheckResponse).result)).toHaveLength(limit)
+      const refused = await app.fetch(batchCheck(storeId, { checks }))
+      expect(refused.status).toBe(400)
+      expect(await refused.json()).toEqual({ code: 'validation_error', message: `batchCheck received ${limit + 1} checks, the maximum allowed is ${limit}` })
+    }
+    finally {
+      if (previous === undefined) delete process.env['OPENFGA_MAX_CHECKS_PER_BATCH_CHECK']
+      else process.env['OPENFGA_MAX_CHECKS_PER_BATCH_CHECK'] = previous
+      await reloadConfigForTests()
+    }
+  })
+
 })

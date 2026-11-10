@@ -233,6 +233,7 @@ export function applyEnvOverrides(raw: unknown, env: EnvLike = process.env): unk
 
   // ─── top-level ──────────────────────────────────────────────────
   set(['migrateOnStart'], 'OPENFGA_MIGRATE_ON_START')
+  set(['maxChecksPerBatchCheck'], 'OPENFGA_MAX_CHECKS_PER_BATCH_CHECK')
 
   return base
 }

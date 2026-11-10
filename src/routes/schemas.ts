@@ -269,8 +269,8 @@ export const ExpandBody = z.object({
 
 // ─── POST /stores/:storeId/batch-check ────────────────────────────
 
-const CORRELATION_ID = z.string().regex(/^[A-Za-z0-9-]{1,36}$/, {
-  message: 'correlation_id must contain only letters, numbers, or hyphens and be ≤ 36 characters',
+const CORRELATION_ID = z.string().refine(value => value.length >= 1 && value.length <= 36 && !/[^A-Za-z0-9_-]/.test(value), {
+  message: 'invalid BatchCheckItem.CorrelationId: value does not match regex pattern "^[\\\\w\\\\d-]{1,36}$"',
 })
 
 const BatchCheckItem = z.object({
@@ -285,26 +285,13 @@ const BatchCheckItem = z.object({
   correlation_id: CORRELATION_ID,
 }).passthrough()
 
-export const BATCH_CHECK_MAX_ITEMS = 50
-
 export const BatchCheckBody = z
   .object({
     consistency: CONSISTENCY,
-    checks: z.array(BatchCheckItem).min(1).max(BATCH_CHECK_MAX_ITEMS),
+    checks: z.array(BatchCheckItem).min(1, 'invalid BatchCheckRequest.Checks: value must contain at least 1 item(s)'),
     authorization_model_id: MODEL_ID.optional(),
   })
   .passthrough()
-  .refine(
-    (b) => {
-      const seen = new Set<string>()
-      for (const c of b.checks) {
-        if (seen.has(c.correlation_id)) return false
-        seen.add(c.correlation_id)
-      }
-      return true
-    },
-    { message: 'correlation_id values must be unique within a batch' },
-  )
 
 // ─── POST /stores/:storeId/list-objects ───────────────────────────
 

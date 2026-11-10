@@ -33,6 +33,7 @@ describe('ConfigSchema — defaults', () => {
     expect(cfg.loadModel.storeName).toBe('default')
     expect(cfg.loadModel.storeId).toBeUndefined()
     expect(cfg.migrateOnStart).toBe(false)
+    expect(cfg.maxChecksPerBatchCheck).toBe(50)
   })
 
   it('accepts a fully-specified config object', () => {
@@ -282,5 +283,12 @@ describe('ConfigSchema — enums', () => {
 
   it('rejects unknown auth mode', () => {
     expect(ConfigSchema.safeParse({ auth: { mode: 'oauth2' } }).success).toBe(false)
+  })
+})
+
+
+describe('ConfigSchema — BatchCheck limit', () => {
+  it.each([0, -1, 1.5, 'invalid', 4294967296])('rejects invalid limit %j', value => {
+    expect(ConfigSchema.safeParse({ maxChecksPerBatchCheck: value }).success).toBe(false)
   })
 })
