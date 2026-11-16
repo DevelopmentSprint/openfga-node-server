@@ -55,7 +55,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@openfga/sdk": "^0.9.7",
+    "@openfga/sdk": "^0.9.8",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^25.9.4",
     "@types/pg": "^8.20.0",
@@ -65,7 +65,7 @@
     "tsdown": "^0.23.7",
     "tsx": "^4.23.15",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.72.1",
+    "typescript-eslint": "^8.72.2",
     "vitepress": "^1.6.4",
     "vitest": "^4.1.11"
   },
