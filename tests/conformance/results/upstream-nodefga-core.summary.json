@@ -1,0 +1,475 @@
+{
+ "leaves": 2468,
+ "totals": {
+  "pass": 2115,
+  "fail": 102,
+  "skip": 251
+ },
+ "by": {
+  "CheckAll | core-model": {
+   "pass": 585,
+   "fail": 0,
+   "skip": 72
+  },
+  "CheckAll | conditions": {
+   "pass": 209,
+   "fail": 14,
+   "skip": 18
+  },
+  "CheckAll | inline-expressions (experimental)": {
+   "pass": 0,
+   "fail": 18,
+   "skip": 0
+  },
+  "ListObjectsAll | core-model": {
+   "pass": 481,
+   "fail": 2,
+   "skip": 58
+  },
+  "ListObjectsAll | conditions": {
+   "pass": 136,
+   "fail": 14,
+   "skip": 20
+  },
+  "ListObjectsAll | inline-expressions (experimental)": {
+   "pass": 0,
+   "fail": 18,
+   "skip": 0
+  },
+  "ListUsersAll | core-model": {
+   "pass": 526,
+   "fail": 0,
+   "skip": 70
+  },
+  "ListUsersAll | conditions": {
+   "pass": 178,
+   "fail": 18,
+   "skip": 11
+  },
+  "ListUsersAll | inline-expressions (experimental)": {
+   "pass": 0,
+   "fail": 18,
+   "skip": 0
+  },
+  "CheckMatrix | core-model": {
+   "pass": 0,
+   "fail": 0,
+   "skip": 1
+  },
+  "ListObjectsMatrix | core-model": {
+   "pass": 0,
+   "fail": 0,
+   "skip": 1
+  }
+ },
+ "failures": [
+  {
+   "test": "CheckAll/RunAllTests/Check/inline_expression_inferred_string_param/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "CheckAll/RunAllTests/Check/inline_expression_inferred_string_param_ctxTuples/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "CheckAll/RunAllTests/Check/val_contextual_tuples_and_wildcard_in_ttu_evaluation_ctxTuples/stage_0/assertion_0",
+   "error": "Not equal: expected: 2027 actual : 2000"
+  },
+  {
+   "test": "CheckAll/RunAllTests/Check/val_contextual_tuples_and_wildcard_in_ttu_evaluation/stage_0/assertion_0",
+   "error": "Not equal: expected: 2027 actual : 2000"
+  },
+  {
+   "test": "CheckAll/RunAllTests/Check/validation_invalid_wildcard_in_contextual_tuple_ctxTuples/stage_0/assertion_0",
+   "error": "Not equal: expected: 2027 actual : 2000"
+  },
+  {
+   "test": "CheckAll/RunAllTests/Check/validation_invalid_wildcard_in_contextual_tuple/stage_0/assertion_0",
+   "error": "Not equal: expected: 2027 actual : 2000"
+  },
+  {
+   "test": "CheckAll/RunAllTests/Check/validation_invalid_userset_in_contextual_tuple_ctxTuples/stage_0/assertion_0",
+   "error": "Not equal: expected: 2027 actual : 2000"
+  },
+  {
+   "test": "CheckAll/RunAllTests/Check/validation_invalid_user_in_contextual_tuple_ctxTuples/stage_0/assertion_0",
+   "error": "Not equal: expected: 2027 actual : 2000"
+  },
+  {
+   "test": "CheckAll/RunAllTests/Check/validation_invalid_userset_in_contextual_tuple/stage_0/assertion_0",
+   "error": "Not equal: expected: 2027 actual : 2000"
+  },
+  {
+   "test": "CheckAll/RunAllTests/Check/validation_invalid_user_in_contextual_tuple/stage_0/assertion_0",
+   "error": "Not equal: expected: 2027 actual : 2000"
+  },
+  {
+   "test": "CheckAll/RunAllTests/Check/validation_invalid_relation_in_contextual_tuple_ctxTuples/stage_0/assertion_0",
+   "error": "Not equal: expected: 2027 actual : 2000"
+  },
+  {
+   "test": "CheckAll/RunAllTests/Check/validation_invalid_relation_in_contextual_tuple/stage_0/assertion_0",
+   "error": "Not equal: expected: 2027 actual : 2000"
+  },
+  {
+   "test": "CheckAll/RunAllTests/Check/validation_invalid_object_type_in_contextual_tuple_ctxTuples/stage_0/assertion_0",
+   "error": "Not equal: expected: 2027 actual : 2000"
+  },
+  {
+   "test": "CheckAll/RunAllTests/Check/validation_invalid_object_type_in_contextual_tuple/stage_0/assertion_0",
+   "error": "Not equal: expected: 2027 actual : 2000"
+  },
+  {
+   "test": "CheckAll/RunAllTests/Check/inline_expression_basic_ctxTuples/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "CheckAll/RunAllTests/Check/inline_expression_basic/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "CheckAll/RunAllTests/Check/inline_expression_exclusion_subtract_missing_param_ctxTuples/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "CheckAll/RunAllTests/Check/inline_expression_exclusion_subtract_missing_param/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "CheckAll/RunAllTests/Check/condition_bound_to_correct_type_restriction_facet/stage_1/assertion_0",
+   "error": "Not equal: expected: 2027 actual : 2000"
+  },
+  {
+   "test": "CheckAll/RunAllTests/Check/condition_bound_to_correct_type_restriction_facet/stage_1/assertion_1",
+   "error": "Not equal: expected: 2027 actual : 2000"
+  },
+  {
+   "test": "CheckAll/RunAllTests/Check/inline_expression_ipaddress_param/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "CheckAll/RunAllTests/Check/inline_expression_userset_subject_ctxTuples/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "CheckAll/RunAllTests/Check/inline_expression_userset_subject/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "CheckAll/RunAllTests/Check/inline_expression_ipaddress_param_ctxTuples/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "CheckAll/RunAllTests/Check/inline_expression_ttu_ctxTuples/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "CheckAll/RunAllTests/Check/inline_expression_ttu/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "CheckAll/RunAllTests/Check/inline_expression_int_param_ctxTuples/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "CheckAll/RunAllTests/Check/inline_expression_timestamp_param_ctxTuples/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "CheckAll/RunAllTests/Check/inline_expression_alongside_named_condition_ctxTuples/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "CheckAll/RunAllTests/Check/inline_expression_int_param/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "CheckAll/RunAllTests/Check/inline_expression_timestamp_param/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "CheckAll/RunAllTests/Check/inline_expression_alongside_named_condition/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "ListObjectsAll/RunAll/ListObjects/inline_expression_ttu/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "ListObjectsAll/RunAll/ListObjects/inline_expression_userset_subject_ctxTuples/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "ListObjectsAll/RunAll/ListObjects/inline_expression_userset_subject/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "ListObjectsAll/RunAll/ListObjects/inline_expression_timestamp_param_ctxTuples/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "ListObjectsAll/RunAll/ListObjects/inline_expression_ipaddress_param_ctxTuples/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "ListObjectsAll/RunAll/ListObjects/inline_expression_ttu_ctxTuples/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "ListObjectsAll/RunAll/ListObjects/inline_expression_ipaddress_param/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "ListObjectsAll/RunAll/ListObjects/inline_expression_exclusion_subtract_missing_param/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "ListObjectsAll/RunAll/ListObjects/inline_expression_alongside_named_condition_ctxTuples/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "ListObjectsAll/RunAll/ListObjects/inline_expression_timestamp_param/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "ListObjectsAll/RunAll/ListObjects/inline_expression_int_param_ctxTuples/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "ListObjectsAll/RunAll/ListObjects/inline_expression_int_param/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "ListObjectsAll/RunAll/ListObjects/inline_expression_alongside_named_condition/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "ListObjectsAll/RunAll/ListObjects/inline_expression_inferred_string_param_ctxTuples/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "ListObjectsAll/RunAll/ListObjects/inline_expression_inferred_string_param/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "ListObjectsAll/RunAll/ListObjects/inline_expression_basic_ctxTuples/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "ListObjectsAll/RunAll/ListObjects/inline_expression_basic/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "ListObjectsAll/RunAll/ListObjects/inline_expression_exclusion_subtract_missing_param_ctxTuples/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "ListObjectsAll/RunAll/ListObjects/true_butnot_cycle_return_false_ctxTuples/stage_0/assertion_0",
+   "error": "elements differ extra elements in list B: ([]interface {}) (len=1) { (string) (len=10) \"document:1\" } listA: ([]string) <nil> listB: ([]string) (len=1) { (string) (len=10) \"document:1\" }"
+  },
+  {
+   "test": "ListObjectsAll/RunAll/ListObjects/true_butnot_cycle_return_false/stage_0/assertion_0",
+   "error": "elements differ extra elements in list B: ([]interface {}) (len=1) { (string) (len=10) \"document:1\" } listA: ([]string) <nil> listB: ([]string) (len=1) { (string) (len=10) \"document:1\" }"
+  },
+  {
+   "test": "ListObjectsAll/RunAll/ListObjects/validation_invalid_object_type_in_contextual_tuple_ctxTuples/stage_0/assertion_0",
+   "error": "Not equal: expected: 2027 actual : 2000"
+  },
+  {
+   "test": "ListObjectsAll/RunAll/ListObjects/error_if_contextual_tuples_do_not_follow_type_restrictions/stage_0/assertion_0",
+   "error": "Not equal: expected: 2027 actual : 2000"
+  },
+  {
+   "test": "ListObjectsAll/RunAll/ListObjects/error_if_contextual_tuples_do_not_follow_type_restrictions/stage_1/assertion_0",
+   "error": "Not equal: expected: 2027 actual : 2000"
+  },
+  {
+   "test": "ListObjectsAll/RunAll/ListObjects/val_contextual_tuples_and_wildcard_in_ttu_evaluation_ctxTuples/stage_0/assertion_0",
+   "error": "Not equal: expected: 2027 actual : 2000"
+  },
+  {
+   "test": "ListObjectsAll/RunAll/ListObjects/val_contextual_tuples_and_wildcard_in_ttu_evaluation/stage_0/assertion_0",
+   "error": "Not equal: expected: 2027 actual : 2000"
+  },
+  {
+   "test": "ListObjectsAll/RunAll/ListObjects/validation_invalid_wildcard_in_contextual_tuple_ctxTuples/stage_0/assertion_0",
+   "error": "Not equal: expected: 2027 actual : 2000"
+  },
+  {
+   "test": "ListObjectsAll/RunAll/ListObjects/validation_invalid_wildcard_in_contextual_tuple/stage_0/assertion_0",
+   "error": "Not equal: expected: 2027 actual : 2000"
+  },
+  {
+   "test": "ListObjectsAll/RunAll/ListObjects/validation_invalid_userset_in_contextual_tuple_ctxTuples/stage_0/assertion_0",
+   "error": "Not equal: expected: 2027 actual : 2000"
+  },
+  {
+   "test": "ListObjectsAll/RunAll/ListObjects/validation_invalid_userset_in_contextual_tuple/stage_0/assertion_0",
+   "error": "Not equal: expected: 2027 actual : 2000"
+  },
+  {
+   "test": "ListObjectsAll/RunAll/ListObjects/validation_invalid_user_in_contextual_tuple_ctxTuples/stage_0/assertion_0",
+   "error": "Not equal: expected: 2027 actual : 2000"
+  },
+  {
+   "test": "ListObjectsAll/RunAll/ListObjects/validation_invalid_user_in_contextual_tuple/stage_0/assertion_0",
+   "error": "Not equal: expected: 2027 actual : 2000"
+  },
+  {
+   "test": "ListObjectsAll/RunAll/ListObjects/validation_invalid_relation_in_contextual_tuple_ctxTuples/stage_0/assertion_0",
+   "error": "Not equal: expected: 2027 actual : 2000"
+  },
+  {
+   "test": "ListObjectsAll/RunAll/ListObjects/validation_invalid_relation_in_contextual_tuple/stage_0/assertion_0",
+   "error": "Not equal: expected: 2027 actual : 2000"
+  },
+  {
+   "test": "ListObjectsAll/RunAll/ListObjects/validation_invalid_object_type_in_contextual_tuple/stage_0/assertion_0",
+   "error": "Not equal: expected: 2027 actual : 2000"
+  },
+  {
+   "test": "ListUsersAll/RunAll/ListUsers/inline_expression_int_param/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "ListUsersAll/RunAll/ListUsers/inline_expression_alongside_named_condition_ctxTuples/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "ListUsersAll/RunAll/ListUsers/inline_expression_ttu_ctxTuples/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "ListUsersAll/RunAll/ListUsers/inline_expression_alongside_named_condition/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "ListUsersAll/RunAll/ListUsers/inline_expression_exclusion_subtract_missing_param/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "ListUsersAll/RunAll/ListUsers/inline_expression_inferred_string_param_ctxTuples/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "ListUsersAll/RunAll/ListUsers/inline_expression_inferred_string_param/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "ListUsersAll/RunAll/ListUsers/inline_expression_exclusion_subtract_missing_param_ctxTuples/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "ListUsersAll/RunAll/ListUsers/inline_expression_basic/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "ListUsersAll/RunAll/ListUsers/inline_expression_basic_ctxTuples/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "ListUsersAll/RunAll/ListUsers/relation_through_ttu_with_condition/stage_0/assertion_1",
+   "error": "An error is expected but got nil."
+  },
+  {
+   "test": "ListUsersAll/RunAll/ListUsers/relation_through_ttu_with_condition/stage_0/assertion_2",
+   "error": "An error is expected but got nil."
+  },
+  {
+   "test": "ListUsersAll/RunAll/ListUsers/validation_invalid_object_type_in_contextual_tuple_ctxTuples/stage_0/assertion_0",
+   "error": "Not equal: expected: 2027 actual : 2000"
+  },
+  {
+   "test": "ListUsersAll/RunAll/ListUsers/validation_invalid_object_type_in_contextual_tuple/stage_0/assertion_0",
+   "error": "Not equal: expected: 2027 actual : 2000"
+  },
+  {
+   "test": "ListUsersAll/RunAll/ListUsers/inline_expression_ipaddress_param/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "ListUsersAll/RunAll/ListUsers/inline_expression_ttu/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "ListUsersAll/RunAll/ListUsers/inline_expression_userset_subject_ctxTuples/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "ListUsersAll/RunAll/ListUsers/error_if_contextual_tuples_do_not_follow_type_restrictions/stage_0/assertion_0",
+   "error": "Not equal: expected: 2027 actual : 2000"
+  },
+  {
+   "test": "ListUsersAll/RunAll/ListUsers/inline_expression_userset_subject/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "ListUsersAll/RunAll/ListUsers/inline_expression_ipaddress_param_ctxTuples/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "ListUsersAll/RunAll/ListUsers/error_if_contextual_tuples_do_not_follow_type_restrictions/stage_1/assertion_0",
+   "error": "Not equal: expected: 2027 actual : 2000"
+  },
+  {
+   "test": "ListUsersAll/RunAll/ListUsers/validation_invalid_wildcard_in_contextual_tuple/stage_0/assertion_0",
+   "error": "Not equal: expected: 2027 actual : 2000"
+  },
+  {
+   "test": "ListUsersAll/RunAll/ListUsers/validation_invalid_user_in_contextual_tuple_ctxTuples/stage_0/assertion_0",
+   "error": "Not equal: expected: 2027 actual : 2000"
+  },
+  {
+   "test": "ListUsersAll/RunAll/ListUsers/relation_through_ttu_with_condition_ctxTuples/stage_0/assertion_1",
+   "error": "An error is expected but got nil."
+  },
+  {
+   "test": "ListUsersAll/RunAll/ListUsers/validation_invalid_userset_in_contextual_tuple_ctxTuples/stage_0/assertion_0",
+   "error": "Not equal: expected: 2027 actual : 2000"
+  },
+  {
+   "test": "ListUsersAll/RunAll/ListUsers/validation_invalid_userset_in_contextual_tuple/stage_0/assertion_0",
+   "error": "Not equal: expected: 2027 actual : 2000"
+  },
+  {
+   "test": "ListUsersAll/RunAll/ListUsers/val_contextual_tuples_and_wildcard_in_ttu_evaluation/stage_0/assertion_0",
+   "error": "Not equal: expected: 2027 actual : 2000"
+  },
+  {
+   "test": "ListUsersAll/RunAll/ListUsers/relation_through_ttu_with_condition_ctxTuples/stage_0/assertion_2",
+   "error": "An error is expected but got nil."
+  },
+  {
+   "test": "ListUsersAll/RunAll/ListUsers/validation_invalid_wildcard_in_contextual_tuple_ctxTuples/stage_0/assertion_0",
+   "error": "Not equal: expected: 2027 actual : 2000"
+  },
+  {
+   "test": "ListUsersAll/RunAll/ListUsers/val_contextual_tuples_and_wildcard_in_ttu_evaluation_ctxTuples/stage_0/assertion_0",
+   "error": "Not equal: expected: 2027 actual : 2000"
+  },
+  {
+   "test": "ListUsersAll/RunAll/ListUsers/validation_invalid_relation_in_contextual_tuple_ctxTuples/stage_0/assertion_0",
+   "error": "Not equal: expected: 2027 actual : 2000"
+  },
+  {
+   "test": "ListUsersAll/RunAll/ListUsers/validation_invalid_user_in_contextual_tuple/stage_0/assertion_0",
+   "error": "Not equal: expected: 2027 actual : 2000"
+  },
+  {
+   "test": "ListUsersAll/RunAll/ListUsers/validation_invalid_relation_in_contextual_tuple/stage_0/assertion_0",
+   "error": "Not equal: expected: 2027 actual : 2000"
+  },
+  {
+   "test": "ListUsersAll/RunAll/ListUsers/inline_expression_timestamp_param/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "ListUsersAll/RunAll/ListUsers/inline_expression_timestamp_param_ctxTuples/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  },
+  {
+   "test": "ListUsersAll/RunAll/ListUsers/inline_expression_int_param_ctxTuples/stage_0",
+   "error": "Received unexpected error: rpc error: code = Code(2056) desc = condition '$expression' is not defined"
+  }
+ ]
+}

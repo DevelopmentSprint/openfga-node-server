@@ -1,0 +1,59 @@
+{
+ "leaves": 2302,
+ "totals": {
+  "pass": 2296,
+  "fail": 3,
+  "skip": 3
+ },
+ "by": {
+  "CheckAll | core-model": {
+   "pass": 0,
+   "fail": 0,
+   "skip": 1
+  },
+  "ListObjectsAll | core-model": {
+   "pass": 0,
+   "fail": 0,
+   "skip": 1
+  },
+  "ListUsersAll | core-model": {
+   "pass": 0,
+   "fail": 0,
+   "skip": 1
+  },
+  "CheckMatrix | core-model": {
+   "pass": 1989,
+   "fail": 3,
+   "skip": 0
+  },
+  "CheckMatrix | conditions": {
+   "pass": 132,
+   "fail": 0,
+   "skip": 0
+  },
+  "ListObjectsMatrix | core-model": {
+   "pass": 173,
+   "fail": 0,
+   "skip": 0
+  },
+  "ListObjectsMatrix | conditions": {
+   "pass": 2,
+   "fail": 0,
+   "skip": 0
+  }
+ },
+ "failures": [
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_complexity4_ttu_and_nested_complex3/assertion_list_users_path_to_user_1",
+   "error": "An error is expected but got nil."
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_complexity4_or_complex4/assertion_list_users_path_to_user_through_ttu_and_nested_complex3",
+   "error": "An error is expected but got nil."
+  },
+  {
+   "test": "CheckMatrix/test_matrix_external_experimental_external/complete_testing_model/stage_complexity4_or_complex4/assertion_list_users_no_path_1",
+   "error": "An error is expected but got nil."
+  }
+ ]
+}

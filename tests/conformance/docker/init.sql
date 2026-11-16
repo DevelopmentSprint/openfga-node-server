@@ -1,0 +1,2 @@
+CREATE DATABASE reference;
+CREATE DATABASE nodefga;
